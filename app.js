@@ -1,4 +1,7 @@
 const STORAGE_KEY = "design-team-live-board-v1";
+const ACCESS_STORAGE_KEY = "design-team-board-access-v1";
+const ACCESS_CODE = "design2026";
+const ACCESS_CODE_HASH = "020c355824f43c23a61f7fbeb5fde1acdfdf447747b52c670bfd965be7cd9a52";
 const CHANNEL_NAME = "design-team-board-sync";
 const laneCount = 7;
 const SUPABASE_CLIENT_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
@@ -179,10 +182,15 @@ let toastTimer = null;
 let remoteClient = null;
 let remoteChannel = null;
 let remoteRefreshTimer = null;
+let boardStarted = false;
 
 const channel = "BroadcastChannel" in window ? new BroadcastChannel(CHANNEL_NAME) : null;
 
 const els = {
+  accessGate: document.querySelector("#accessGate"),
+  accessForm: document.querySelector("#accessForm"),
+  accessCode: document.querySelector("#accessCode"),
+  accessError: document.querySelector("#accessError"),
   liveClock: document.querySelector("#liveClock"),
   prevMonth: document.querySelector("#prevMonth"),
   nextMonth: document.querySelector("#nextMonth"),
@@ -222,13 +230,74 @@ const els = {
 
 init();
 
-function init() {
+async function init() {
+  bindAccessGate();
+  if (!(await hasBoardAccess())) {
+    lockBoard();
+    return;
+  }
+
+  unlockBoard();
+  startBoard();
+}
+
+function startBoard() {
+  if (boardStarted) return;
+  boardStarted = true;
   populateSelects();
   bindEvents();
   render();
   updateClock();
   window.setInterval(updateClock, 1000);
   initRemoteSync();
+}
+
+function bindAccessGate() {
+  els.accessForm.addEventListener("submit", handleAccessSubmit);
+}
+
+async function handleAccessSubmit(event) {
+  event.preventDefault();
+  const code = els.accessCode.value.trim();
+  if (code === ACCESS_CODE) {
+    localStorage.setItem(ACCESS_STORAGE_KEY, ACCESS_CODE_HASH);
+    els.accessError.textContent = "";
+    unlockBoard();
+    startBoard();
+    return;
+  }
+
+  const hash = await hashText(code);
+  if (hash !== ACCESS_CODE_HASH) {
+    els.accessError.textContent = "口令不正确";
+    els.accessCode.select();
+    return;
+  }
+
+  localStorage.setItem(ACCESS_STORAGE_KEY, hash);
+  els.accessError.textContent = "";
+  unlockBoard();
+  startBoard();
+}
+
+async function hasBoardAccess() {
+  return localStorage.getItem(ACCESS_STORAGE_KEY) === ACCESS_CODE_HASH;
+}
+
+function lockBoard() {
+  document.body.classList.add("is-auth-locked");
+  window.setTimeout(() => els.accessCode.focus(), 40);
+}
+
+function unlockBoard() {
+  document.body.classList.remove("is-auth-locked");
+}
+
+async function hashText(value) {
+  if (!window.crypto?.subtle) return value === "design2026" ? ACCESS_CODE_HASH : value;
+  const bytes = new TextEncoder().encode(value);
+  const buffer = await window.crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(buffer)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function bindEvents() {

@@ -24,16 +24,32 @@
   box-sizing: border-box;
 }
 
+html {
+  min-height: 100%;
+  background: var(--bg);
+}
+
 body {
   margin: 0;
   min-width: 1120px;
+  min-height: 100vh;
   background:
-    linear-gradient(180deg, rgba(77, 116, 255, 0.08), transparent 320px),
+    linear-gradient(180deg, rgba(77, 116, 255, 0.08) 0, rgba(77, 116, 255, 0.02) 320px, var(--bg) 100%),
     var(--bg);
   color: var(--ink);
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", sans-serif;
+}
+
+body.is-auth-locked {
+  overflow: hidden;
+}
+
+body.is-auth-locked .app-shell,
+body.is-auth-locked .drawer,
+body.is-auth-locked .context-menu {
+  display: none;
 }
 
 button,
@@ -50,6 +66,7 @@ button {
 .app-shell {
   width: min(1520px, calc(100vw - 48px));
   margin: 0 auto;
+  min-height: 100vh;
   padding: 28px 0 36px;
 }
 
@@ -115,6 +132,63 @@ h1 {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.access-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: none;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(77, 116, 255, 0.14), transparent 320px),
+    linear-gradient(180deg, rgba(77, 116, 255, 0.08), rgba(77, 116, 255, 0.02) 320px),
+    var(--bg);
+}
+
+body.is-auth-locked .access-gate {
+  display: grid;
+}
+
+.access-card {
+  width: min(380px, 100%);
+  display: grid;
+  justify-items: stretch;
+  padding: 30px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow);
+}
+
+.access-card .mark {
+  justify-self: center;
+  margin-bottom: 18px;
+}
+
+.access-card h2 {
+  text-align: center;
+  font-size: 24px;
+}
+
+.access-card p {
+  margin: 6px 0 20px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.access-card .primary-button {
+  width: 100%;
+  margin-top: 14px;
+}
+
+.access-error {
+  min-height: 20px;
+  margin-top: 10px;
+  color: #c83a4c;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .period-controls {
@@ -491,21 +565,27 @@ textarea:focus {
 
 .task-main {
   min-width: 0;
+  display: grid;
+  gap: 2px;
 }
 
 .task-title {
+  display: -webkit-box;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 17px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  font-size: 13px;
+  line-height: 1.18;
   font-weight: 800;
   letter-spacing: 0;
 }
 
 .task-meta {
-  margin-top: 3px;
   color: var(--task-meta, rgba(29, 36, 51, 0.58));
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.2;
 }
 
 .resize-handle {
@@ -607,7 +687,7 @@ textarea:focus {
   align-items: center;
   min-width: 0;
   gap: 7px;
-  height: 30px;
+  min-height: 34px;
   border: 1px solid rgba(255, 255, 255, 0.66);
   border-radius: 7px;
   padding: 0 8px;
@@ -632,10 +712,14 @@ textarea:focus {
 
 .month-task b {
   min-width: 0;
+  display: -webkit-box;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
   font-size: 12px;
+  line-height: 1.15;
 }
 
 .month-task.is-done {
