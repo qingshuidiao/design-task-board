@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>设计任务实时看板</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="mark">D</div>
+          <div>
+            <h1>设计任务实时看板</h1>
+            <p id="liveClock">加载中</p>
+          </div>
+        </div>
+
+        <div class="top-actions">
+          <button class="primary-button" id="openTaskForm">新增任务</button>
+        </div>
+      </header>
+
+      <section class="summary-strip" aria-label="看板概览">
+        <div class="period-controls">
+          <div class="month-control">
+          <button class="icon-button subtle" id="prevMonth" aria-label="上一周期" title="上一周期">‹</button>
+          <div id="monthLabel" class="month-label">2026年05月</div>
+          <button class="icon-button subtle" id="nextMonth" aria-label="下一周期" title="下一周期">›</button>
+          </div>
+          <div class="view-switch" aria-label="看板视图">
+            <button class="view-button is-active" id="weekView" type="button">周</button>
+            <button class="view-button" id="monthView" type="button">月</button>
+          </div>
+        </div>
+
+        <div class="metrics" id="metrics"></div>
+      </section>
+
+      <section class="toolbar" aria-label="筛选">
+        <label class="search-box">
+          <span>搜索</span>
+          <input id="searchInput" type="search" placeholder="任务、成员、状态" />
+        </label>
+
+        <label class="field compact">
+          <span>成员</span>
+          <select id="ownerFilter">
+            <option value="all">全部成员</option>
+          </select>
+        </label>
+
+        <label class="field compact">
+          <span>状态</span>
+          <select id="statusFilter">
+            <option value="all">全部状态</option>
+            <option value="open">未完成</option>
+            <option value="done">已完成</option>
+          </select>
+        </label>
+
+        <div class="toolbar-actions">
+          <button class="ghost-button" id="exportTasks">导出</button>
+          <button class="ghost-button" id="importTasks">导入</button>
+          <input id="importFile" type="file" accept="application/json" hidden />
+        </div>
+      </section>
+
+      <main class="board-card" aria-label="设计任务周看板">
+        <div class="board-header" id="boardHeader"></div>
+        <div class="board-body" id="boardBody">
+          <div class="board-grid" id="boardGrid"></div>
+          <div class="task-grid" id="taskGrid"></div>
+        </div>
+      </main>
+    </div>
+
+    <aside class="drawer" id="taskDrawer" aria-hidden="true">
+      <div class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+        <div class="drawer-header">
+          <div>
+            <p class="eyebrow">任务编辑</p>
+            <h2 id="drawerTitle">新增任务</h2>
+          </div>
+          <button class="icon-button subtle" id="closeDrawer" aria-label="关闭" title="关闭">×</button>
+        </div>
+
+        <form id="taskForm" class="task-form">
+          <input type="hidden" id="taskId" />
+
+          <label class="field">
+            <span>任务名称</span>
+            <input id="taskTitle" type="text" maxlength="40" required placeholder="例如：新工具+组件库学习" />
+          </label>
+
+          <div class="form-grid">
+            <label class="field">
+              <span>负责人</span>
+              <select id="taskOwner" required></select>
+            </label>
+
+            <label class="field">
+              <span>状态</span>
+              <select id="taskStatus" required>
+                <option value="open">未完成</option>
+                <option value="done">已完成</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="form-grid">
+            <label class="field">
+              <span>开始日期</span>
+              <input id="taskStart" type="date" required />
+            </label>
+
+            <label class="field">
+              <span>结束日期</span>
+              <input id="taskEnd" type="date" required />
+            </label>
+          </div>
+
+          <label class="field">
+            <span>显示行</span>
+            <input id="taskLane" type="number" min="1" max="7" required />
+          </label>
+
+          <label class="field">
+            <span>备注</span>
+            <textarea id="taskNote" rows="4" maxlength="160" placeholder="评审链接、交付说明、风险点"></textarea>
+          </label>
+
+          <div class="drawer-actions">
+            <button type="button" class="danger-button" id="deleteTask">删除</button>
+            <div>
+              <button type="button" class="ghost-button" id="cancelForm">取消</button>
+              <button type="submit" class="primary-button">保存</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </aside>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div class="context-menu" id="contextMenu" role="menu" aria-hidden="true">
+      <button type="button" id="contextCreateTask" role="menuitem">新增任务</button>
+    </div>
+
+    <script src="./supabase-config.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
