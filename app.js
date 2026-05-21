@@ -231,7 +231,12 @@ const els = {
 init();
 
 async function init() {
-  bindAccessGate();
+  const hasAccessGate = bindAccessGate();
+  if (!hasAccessGate) {
+    startBoard();
+    return;
+  }
+
   if (!(await hasBoardAccess())) {
     lockBoard();
     return;
@@ -253,7 +258,12 @@ function startBoard() {
 }
 
 function bindAccessGate() {
+  if (!els.accessForm || !els.accessCode || !els.accessError) {
+    return false;
+  }
+
   els.accessForm.addEventListener("submit", handleAccessSubmit);
+  return true;
 }
 
 async function handleAccessSubmit(event) {
