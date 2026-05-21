@@ -251,6 +251,20 @@ body.is-auth-locked .access-gate {
   transform: translateY(-1px);
 }
 
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background: #f8faff;
+}
+
 .danger-button {
   color: #c83a4c;
   background: #fff5f6;
@@ -540,6 +554,14 @@ textarea:focus {
   box-shadow: 0 14px 26px rgba(54, 74, 118, 0.14);
 }
 
+body.is-read-only .task-card {
+  cursor: pointer;
+}
+
+body.is-read-only .task-card:hover {
+  box-shadow: 0 9px 20px rgba(54, 74, 118, 0.08);
+}
+
 .task-content {
   display: flex;
   align-items: center;
@@ -608,6 +630,10 @@ textarea:focus {
 
 .task-card:hover .resize-handle {
   opacity: 1;
+}
+
+body.is-read-only .resize-handle {
+  display: none;
 }
 
 .resize-handle::after {

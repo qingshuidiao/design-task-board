@@ -1,7 +1,8 @@
 const STORAGE_KEY = "design-team-live-board-v1";
-const ACCESS_STORAGE_KEY = "design-team-board-access-v1";
-const ACCESS_CODE = "design2026";
-const ACCESS_CODE_HASH = "020c355824f43c23a61f7fbeb5fde1acdfdf447747b52c670bfd965be7cd9a52";
+const VIEW_ACCESS_CODE = "design2026";
+const EDIT_ACCESS_CODE = "design2026-edit";
+const VIEW_ACCESS_CODE_HASH = "020c355824f43c23a61f7fbeb5fde1acdfdf447747b52c670bfd965be7cd9a52";
+const EDIT_ACCESS_CODE_HASH = "5cdfae5d794b2e72ecf04f7d2a66fe9a6a8615c14849a05d2e940d6928b651a7";
 const CHANNEL_NAME = "design-team-board-sync";
 const laneCount = 7;
 const SUPABASE_CLIENT_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
@@ -183,8 +184,9 @@ let remoteClient = null;
 let remoteChannel = null;
 let remoteRefreshTimer = null;
 let boardStarted = false;
+let accessRole = "viewer";
 
-const channel = "BroadcastChannel" in window ? new BroadcastChannel(CHANNEL_NAME) : null;
+const channel = createBroadcastChannel();
 
 const els = {
   accessGate: document.querySelector("#accessGate"),
@@ -220,6 +222,7 @@ const els = {
   taskLane: document.querySelector("#taskLane"),
   taskNote: document.querySelector("#taskNote"),
   deleteTask: document.querySelector("#deleteTask"),
+  saveTask: document.querySelector("#saveTask") || document.querySelector('#taskForm button[type="submit"]'),
   exportTasks: document.querySelector("#exportTasks"),
   importTasks: document.querySelector("#importTasks"),
   importFile: document.querySelector("#importFile"),
@@ -231,19 +234,8 @@ const els = {
 init();
 
 async function init() {
-  const hasAccessGate = bindAccessGate();
-  if (!hasAccessGate) {
-    startBoard();
-    return;
-  }
-
-  if (!(await hasBoardAccess())) {
-    lockBoard();
-    return;
-  }
-
-  unlockBoard();
-  startBoard();
+  bindAccessGate();
+  lockBoard();
 }
 
 function startBoard() {
@@ -258,6 +250,7 @@ function startBoard() {
 }
 
 function bindAccessGate() {
+  ensureAccessGate();
   if (!els.accessForm || !els.accessCode || !els.accessError) {
     return false;
   }
@@ -269,29 +262,56 @@ function bindAccessGate() {
 async function handleAccessSubmit(event) {
   event.preventDefault();
   const code = els.accessCode.value.trim();
-  if (code === ACCESS_CODE) {
-    localStorage.setItem(ACCESS_STORAGE_KEY, ACCESS_CODE_HASH);
-    els.accessError.textContent = "";
-    unlockBoard();
-    startBoard();
-    return;
-  }
-
-  const hash = await hashText(code);
-  if (hash !== ACCESS_CODE_HASH) {
+  const role = await getAccessRole(code);
+  if (!role) {
     els.accessError.textContent = "口令不正确";
     els.accessCode.select();
     return;
   }
 
-  localStorage.setItem(ACCESS_STORAGE_KEY, hash);
+  accessRole = role;
   els.accessError.textContent = "";
+  els.accessCode.value = "";
   unlockBoard();
   startBoard();
+  applyEditMode();
 }
 
-async function hasBoardAccess() {
-  return localStorage.getItem(ACCESS_STORAGE_KEY) === ACCESS_CODE_HASH;
+function ensureAccessGate() {
+  if (els.accessForm && els.accessCode && els.accessError) return;
+
+  const gate = document.createElement("section");
+  gate.className = "access-gate";
+  gate.id = "accessGate";
+  gate.setAttribute("aria-label", "访问验证");
+  gate.innerHTML = `
+    <form class="access-card" id="accessForm">
+      <div class="mark">D</div>
+      <h2>设计任务实时看板</h2>
+      <p>请输入设计组访问口令</p>
+      <label class="field">
+        <span>访问口令</span>
+        <input id="accessCode" type="password" autocomplete="current-password" placeholder="输入口令后进入看板" required />
+      </label>
+      <button class="primary-button" type="submit">进入看板</button>
+      <div class="access-error" id="accessError" role="alert"></div>
+    </form>
+  `;
+  document.body.prepend(gate);
+  els.accessGate = gate;
+  els.accessForm = gate.querySelector("#accessForm");
+  els.accessCode = gate.querySelector("#accessCode");
+  els.accessError = gate.querySelector("#accessError");
+}
+
+async function getAccessRole(code) {
+  if (code === EDIT_ACCESS_CODE) return "editor";
+  if (code === VIEW_ACCESS_CODE) return "viewer";
+
+  const hash = await hashText(code);
+  if (hash === EDIT_ACCESS_CODE_HASH) return "editor";
+  if (hash === VIEW_ACCESS_CODE_HASH) return "viewer";
+  return null;
 }
 
 function lockBoard() {
@@ -304,10 +324,28 @@ function unlockBoard() {
 }
 
 async function hashText(value) {
-  if (!window.crypto?.subtle) return value === "design2026" ? ACCESS_CODE_HASH : value;
+  if (!window.crypto?.subtle) return value;
   const bytes = new TextEncoder().encode(value);
   const buffer = await window.crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(buffer)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function hasEditAccess() {
+  return accessRole === "editor";
+}
+
+function requireEditAccess() {
+  if (hasEditAccess()) return true;
+  showToast("当前为只读模式");
+  return false;
+}
+
+function applyEditMode() {
+  const canEdit = hasEditAccess();
+  document.body.classList.toggle("is-read-only", !canEdit);
+  els.openTaskForm.hidden = !canEdit;
+  els.importTasks.hidden = !canEdit;
+  render();
 }
 
 function bindEvents() {
@@ -331,7 +369,10 @@ function bindEvents() {
     render();
   });
 
-  els.openTaskForm.addEventListener("click", () => openDrawer());
+  els.openTaskForm.addEventListener("click", () => {
+    if (!requireEditAccess()) return;
+    openDrawer();
+  });
   els.closeDrawer.addEventListener("click", closeDrawer);
   els.cancelForm.addEventListener("click", closeDrawer);
 
@@ -342,11 +383,14 @@ function bindEvents() {
   els.taskForm.addEventListener("submit", handleSubmit);
   els.deleteTask.addEventListener("click", deleteCurrentTask);
   els.exportTasks.addEventListener("click", exportTasks);
-  els.importTasks.addEventListener("click", () => els.importFile.click());
+  els.importTasks.addEventListener("click", () => {
+    if (!requireEditAccess()) return;
+    els.importFile.click();
+  });
   els.importFile.addEventListener("change", importTasks);
 
   els.boardBody.addEventListener("dragover", (event) => {
-    if (!dragTaskId || state.viewMode !== "week") return;
+    if (!hasEditAccess() || !dragTaskId || state.viewMode !== "week") return;
     event.preventDefault();
     highlightCellFromPointer(event.clientX, event.clientY);
   });
@@ -601,6 +645,11 @@ function renderWeekTasks(period) {
     card.addEventListener("click", () => openDrawer(card.dataset.id));
     card.addEventListener("dblclick", (event) => event.stopPropagation());
     card.addEventListener("dragstart", (event) => {
+      if (!hasEditAccess()) {
+        event.preventDefault();
+        return;
+      }
+
       dragTaskId = card.dataset.id;
       event.dataTransfer.effectAllowed = "move";
       event.dataTransfer.setData("text/plain", card.dataset.id);
@@ -613,10 +662,12 @@ function renderWeekTasks(period) {
     });
   });
 
-  els.taskGrid.querySelectorAll(".resize-handle").forEach((handle) => {
-    handle.addEventListener("click", (event) => event.stopPropagation());
-    handle.addEventListener("pointerdown", startResize);
-  });
+  if (hasEditAccess()) {
+    els.taskGrid.querySelectorAll(".resize-handle").forEach((handle) => {
+      handle.addEventListener("click", (event) => event.stopPropagation());
+      handle.addEventListener("pointerdown", startResize);
+    });
+  }
 }
 
 function renderWeekTask(task, weekDays) {
@@ -632,7 +683,7 @@ function renderWeekTask(task, weekDays) {
   return `
     <article
       class="task-card tone-${tone} is-${task.status}"
-      draggable="true"
+      draggable="${hasEditAccess() ? "true" : "false"}"
       data-id="${task.id}"
       style="grid-column: ${startIndex + 1} / span ${duration}; grid-row: ${task.lane};"
       title="${escapeHtml(task.title)}"
@@ -756,6 +807,7 @@ function getVisibleTasks(period) {
 
 async function handleSubmit(event) {
   event.preventDefault();
+  if (!requireEditAccess()) return;
 
   const start = els.taskStart.value;
   const end = els.taskEnd.value;
@@ -792,6 +844,8 @@ async function handleSubmit(event) {
 }
 
 async function deleteCurrentTask() {
+  if (!requireEditAccess()) return;
+
   const id = els.taskId.value;
   if (!id) {
     closeDrawer();
@@ -807,6 +861,8 @@ async function deleteCurrentTask() {
 }
 
 function openDrawer(id = null, overrides = {}) {
+  if (!id && !requireEditAccess()) return;
+
   const task = id ? state.tasks.find((item) => item.id === id) : null;
   const firstDay = toISODate(getWeekDays(state.weekStart)[0]);
   const defaultTask = {
@@ -822,7 +878,8 @@ function openDrawer(id = null, overrides = {}) {
   };
   const data = task || defaultTask;
 
-  els.drawerTitle.textContent = task ? "编辑任务" : "新增任务";
+  const canEdit = hasEditAccess();
+  els.drawerTitle.textContent = canEdit ? (task ? "编辑任务" : "新增任务") : "查看任务";
   els.taskId.value = data.id;
   els.taskTitle.value = data.title;
   els.taskOwner.value = data.owner;
@@ -831,11 +888,15 @@ function openDrawer(id = null, overrides = {}) {
   els.taskEnd.value = data.end;
   els.taskLane.value = data.lane;
   els.taskNote.value = data.note || "";
-  els.deleteTask.style.visibility = task ? "visible" : "hidden";
+  els.deleteTask.style.visibility = canEdit && task ? "visible" : "hidden";
+  els.saveTask.hidden = !canEdit;
+  [els.taskTitle, els.taskOwner, els.taskStatus, els.taskStart, els.taskEnd, els.taskLane, els.taskNote].forEach((field) => {
+    field.disabled = !canEdit;
+  });
 
   els.drawer.classList.add("is-open");
   els.drawer.setAttribute("aria-hidden", "false");
-  window.setTimeout(() => els.taskTitle.focus(), 40);
+  window.setTimeout(() => (canEdit ? els.taskTitle : els.closeDrawer).focus(), 40);
 }
 
 function closeDrawer() {
@@ -844,6 +905,7 @@ function closeDrawer() {
 }
 
 function openDrawerFromBoard(event) {
+  if (!hasEditAccess()) return;
   if (event.target.closest(".task-card")) return;
   const target = getBoardDateTarget(event);
   if (!target) return;
@@ -854,6 +916,8 @@ function openDrawerFromBoard(event) {
 }
 
 function openBoardContextMenu(event) {
+  if (!hasEditAccess()) return;
+
   const target = getBoardDateTarget(event);
   if (!target) return;
 
@@ -866,6 +930,7 @@ function openBoardContextMenu(event) {
 }
 
 function createTaskFromContext() {
+  if (!requireEditAccess()) return;
   if (!contextTarget) return;
   openDrawer(null, {
     start: contextTarget.date,
@@ -900,7 +965,7 @@ function getBoardDateTarget(event) {
 }
 
 function handleTaskDrop(event) {
-  if (!dragTaskId || state.viewMode !== "week") return;
+  if (!hasEditAccess() || !dragTaskId || state.viewMode !== "week") return;
   event.preventDefault();
   const task = state.tasks.find((item) => item.id === dragTaskId);
   const cell = getCellFromPointer(event.clientX, event.clientY);
@@ -921,6 +986,8 @@ function handleTaskDrop(event) {
 }
 
 function startResize(event) {
+  if (!hasEditAccess()) return;
+
   event.stopPropagation();
   event.preventDefault();
   const id = event.currentTarget.dataset.id;
@@ -938,7 +1005,7 @@ function startResize(event) {
 }
 
 function handleResizeMove(event) {
-  if (!resizeState) return;
+  if (!hasEditAccess() || !resizeState) return;
   const task = state.tasks.find((item) => item.id === resizeState.id);
   const cell = getCellFromPointer(event.clientX, event.clientY);
   if (!task || !cell) return;
@@ -954,7 +1021,7 @@ function handleResizeMove(event) {
 }
 
 function handleResizeEnd() {
-  if (!resizeState) return;
+  if (!hasEditAccess() || !resizeState) return;
   const task = state.tasks.find((item) => item.id === resizeState.id);
   resizeState = null;
   persist();
@@ -975,6 +1042,11 @@ function exportTasks() {
 }
 
 function importTasks(event) {
+  if (!requireEditAccess()) {
+    event.target.value = "";
+    return;
+  }
+
   const file = event.target.files?.[0];
   if (!file) return;
 
@@ -1060,17 +1132,45 @@ function setViewMode(mode) {
 }
 
 function persist(shouldBroadcast = true) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
+  writeStorage(STORAGE_KEY, JSON.stringify(state.tasks));
   if (shouldBroadcast && channel) {
-    channel.postMessage({ type: "tasks-updated", tasks: state.tasks });
+    try {
+      channel.postMessage({ type: "tasks-updated", tasks: state.tasks });
+    } catch (error) {
+      console.warn(error);
+    }
   }
 }
 
 function loadTasks() {
-  const saved = localStorage.getItem(STORAGE_KEY);
+  const saved = readStorage(STORAGE_KEY);
   if (!saved) return seedTasks;
   const parsed = safeParse(saved, seedTasks);
   return Array.isArray(parsed) ? parsed.map(normalizeTask).filter(Boolean) : seedTasks;
+}
+
+function readStorage(key) {
+  try {
+    return window.localStorage?.getItem(key) || "";
+  } catch {
+    return "";
+  }
+}
+
+function writeStorage(key, value) {
+  try {
+    window.localStorage?.setItem(key, value);
+  } catch (error) {
+    console.warn(error);
+  }
+}
+
+function createBroadcastChannel() {
+  try {
+    return "BroadcastChannel" in window ? new BroadcastChannel(CHANNEL_NAME) : null;
+  } catch {
+    return null;
+  }
 }
 
 function normalizeTask(task) {

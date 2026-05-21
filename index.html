@@ -4,9 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>设计任务实时看板</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20260521-access2" />
   </head>
-  <body>
+  <body class="is-auth-locked">
+    <section class="access-gate" id="accessGate" aria-label="访问验证">
+      <form class="access-card" id="accessForm">
+        <div class="mark">D</div>
+        <h2>设计任务实时看板</h2>
+        <p>请输入设计组访问口令</p>
+        <label class="field">
+          <span>访问口令</span>
+          <input id="accessCode" type="password" autocomplete="current-password" placeholder="输入口令后进入看板" required />
+        </label>
+        <button class="primary-button" type="submit">进入看板</button>
+        <div class="access-error" id="accessError" role="alert"></div>
+      </form>
+    </section>
+
     <div class="app-shell">
       <header class="topbar">
         <div class="brand">
@@ -135,7 +149,7 @@
             <button type="button" class="danger-button" id="deleteTask">删除</button>
             <div>
               <button type="button" class="ghost-button" id="cancelForm">取消</button>
-              <button type="submit" class="primary-button">保存</button>
+              <button type="submit" class="primary-button" id="saveTask">保存</button>
             </div>
           </div>
         </form>
@@ -148,6 +162,6 @@
     </div>
 
     <script src="./supabase-config.js"></script>
-    <script src="./app.js"></script>
+    <script src="./app.js?v=20260521-access2"></script>
   </body>
 </html>
