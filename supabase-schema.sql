@@ -5,11 +5,18 @@ create table if not exists public.design_tasks (
   start_date date not null,
   end_date date not null,
   lane integer not null default 1 check (lane between 1 and 7),
-  status text not null default 'open' check (status in ('open', 'done')),
+  status text not null default 'open' check (status in ('open', 'done', 'leave')),
   note text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.design_tasks
+drop constraint if exists design_tasks_status_check;
+
+alter table public.design_tasks
+add constraint design_tasks_status_check
+check (status in ('open', 'done', 'leave'));
 
 alter table public.design_tasks enable row level security;
 
