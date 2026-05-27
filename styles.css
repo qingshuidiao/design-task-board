@@ -18,6 +18,8 @@
   --apricot-fg: #8f6f3d;
   --done-bg: #c8f1d9;
   --done-fg: #0a9968;
+  --leave-bg: #e4e8ef;
+  --leave-fg: #5f6878;
 }
 
 * {
@@ -550,6 +552,17 @@ textarea:focus {
   color: var(--done-fg);
 }
 
+.task-card.is-leave {
+  --task-bg: var(--leave-bg);
+  --task-fg: var(--leave-fg);
+  --task-meta: rgba(95, 104, 120, 0.72);
+  border-color: rgba(95, 104, 120, 0.22);
+}
+
+.task-card.is-leave .task-title {
+  color: var(--leave-fg);
+}
+
 .task-card:hover {
   box-shadow: 0 14px 26px rgba(54, 74, 118, 0.14);
 }
@@ -579,7 +592,7 @@ body.is-read-only .task-card:hover {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: var(--task-fg);
+  background: var(--owner-fg, var(--task-fg));
   color: #fff;
   font-size: 18px;
   font-weight: 900;
@@ -730,7 +743,7 @@ body.is-read-only .resize-handle {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: var(--task-fg);
+  background: var(--owner-fg, var(--task-fg));
   color: #fff;
   font-size: 12px;
   font-weight: 900;
@@ -752,6 +765,12 @@ body.is-read-only .resize-handle {
   --task-bg: var(--done-bg);
   --task-fg: var(--done-fg);
   border-color: rgba(10, 153, 104, 0.22);
+}
+
+.month-task.is-leave {
+  --task-bg: var(--leave-bg);
+  --task-fg: var(--leave-fg);
+  border-color: rgba(95, 104, 120, 0.22);
 }
 
 .drawer {
@@ -868,16 +887,19 @@ body.is-read-only .resize-handle {
 .tone-blue {
   --task-bg: var(--blue-bg);
   --task-fg: var(--blue-fg);
+  --owner-fg: var(--blue-fg);
 }
 
 .tone-cyan {
   --task-bg: var(--cyan-bg);
   --task-fg: var(--cyan-fg);
+  --owner-fg: var(--cyan-fg);
 }
 
 .tone-apricot {
   --task-bg: var(--apricot-bg);
   --task-fg: var(--apricot-fg);
+  --owner-fg: var(--apricot-fg);
 }
 
 @media (max-width: 1180px) {

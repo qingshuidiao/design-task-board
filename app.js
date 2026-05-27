@@ -17,6 +17,7 @@ const owners = [
 const statusText = {
   open: "未完成",
   done: "已完成",
+  leave: "请假",
 };
 
 const seedTasks = [
@@ -775,6 +776,7 @@ function renderMetrics(period) {
   const open = visibleTasks.filter((task) => task.status === "open").length;
   const todayTasks = visibleTasks.filter((task) => dateInRange(today, task.start, task.end)).length;
   const done = visibleTasks.filter((task) => task.status === "done").length;
+  const leave = visibleTasks.filter((task) => task.status === "leave").length;
   const periodLabel = state.viewMode === "week" ? "本周任务" : "本月任务";
 
   els.metrics.innerHTML = [
@@ -782,6 +784,7 @@ function renderMetrics(period) {
     metric("未完成", open),
     metric("今日覆盖", todayTasks),
     metric("已完成", done),
+    metric("请假", leave),
   ].join("");
 }
 
@@ -1190,7 +1193,7 @@ function normalizeTask(task) {
 }
 
 function normalizeStatus(status) {
-  return status === "done" ? "done" : "open";
+  return Object.prototype.hasOwnProperty.call(statusText, status) ? status : "open";
 }
 
 function getCellFromPointer(x, y) {
