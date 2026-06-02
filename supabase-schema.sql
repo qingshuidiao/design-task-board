@@ -28,26 +28,10 @@ to anon
 using (true);
 
 drop policy if exists "Allow public task inserts" on public.design_tasks;
-create policy "Allow public task inserts"
-on public.design_tasks
-for insert
-to anon
-with check (true);
 
 drop policy if exists "Allow public task updates" on public.design_tasks;
-create policy "Allow public task updates"
-on public.design_tasks
-for update
-to anon
-using (true)
-with check (true);
 
 drop policy if exists "Allow public task deletes" on public.design_tasks;
-create policy "Allow public task deletes"
-on public.design_tasks
-for delete
-to anon
-using (true);
 
 create or replace function public.set_design_tasks_updated_at()
 returns trigger

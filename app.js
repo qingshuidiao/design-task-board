@@ -1,8 +1,6 @@
 const STORAGE_KEY = "design-team-live-board-v1";
 const VIEW_ACCESS_CODE = "design2026";
-const EDIT_ACCESS_CODE = "design2026-edit";
 const VIEW_ACCESS_CODE_HASH = "020c355824f43c23a61f7fbeb5fde1acdfdf447747b52c670bfd965be7cd9a52";
-const EDIT_ACCESS_CODE_HASH = "5cdfae5d794b2e72ecf04f7d2a66fe9a6a8615c14849a05d2e940d6928b651a7";
 const CHANNEL_NAME = "design-team-board-sync";
 const laneCount = 7;
 const SUPABASE_CLIENT_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
@@ -306,11 +304,9 @@ function ensureAccessGate() {
 }
 
 async function getAccessRole(code) {
-  if (code === EDIT_ACCESS_CODE) return "editor";
   if (code === VIEW_ACCESS_CODE) return "viewer";
 
   const hash = await hashText(code);
-  if (hash === EDIT_ACCESS_CODE_HASH) return "editor";
   if (hash === VIEW_ACCESS_CODE_HASH) return "viewer";
   return null;
 }
@@ -482,7 +478,9 @@ async function loadRemoteTasks() {
     return;
   }
 
-  await upsertRemoteTasks(state.tasks.length ? state.tasks : seedTasks);
+  if (!data?.length) {
+    showToast("共享任务表暂无数据");
+  }
 }
 
 function subscribeRemoteTasks() {
@@ -511,7 +509,7 @@ function subscribeRemoteTasks() {
 }
 
 async function syncTaskToRemote(task) {
-  if (!remoteClient) return;
+  if (!remoteClient || !hasEditAccess()) return;
 
   const { error } = await remoteClient
     .from("design_tasks")
@@ -524,7 +522,7 @@ async function syncTaskToRemote(task) {
 }
 
 async function deleteTaskFromRemote(id) {
-  if (!remoteClient) return;
+  if (!remoteClient || !hasEditAccess()) return;
 
   const { error } = await remoteClient
     .from("design_tasks")
@@ -538,7 +536,7 @@ async function deleteTaskFromRemote(id) {
 }
 
 async function upsertRemoteTasks(tasks) {
-  if (!remoteClient || !tasks.length) return;
+  if (!remoteClient || !hasEditAccess() || !tasks.length) return;
 
   const { error } = await remoteClient
     .from("design_tasks")
