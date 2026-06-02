@@ -20,18 +20,86 @@ check (status in ('open', 'done', 'leave'));
 
 alter table public.design_tasks enable row level security;
 
+create table if not exists public.design_board_editors (
+  email text primary key check (email = lower(email)),
+  display_name text not null default '',
+  created_at timestamptz not null default now()
+);
+
+alter table public.design_board_editors enable row level security;
+
+grant usage on schema public to anon, authenticated;
+grant select on public.design_tasks to anon, authenticated;
+grant insert, update, delete on public.design_tasks to authenticated;
+grant select on public.design_board_editors to authenticated;
+
 drop policy if exists "Allow public task reads" on public.design_tasks;
 create policy "Allow public task reads"
 on public.design_tasks
 for select
-to anon
+to anon, authenticated
 using (true);
 
 drop policy if exists "Allow public task inserts" on public.design_tasks;
+drop policy if exists "Allow editor task inserts" on public.design_tasks;
+create policy "Allow editor task inserts"
+on public.design_tasks
+for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.design_board_editors editor
+    where editor.email = lower(auth.jwt() ->> 'email')
+  )
+);
 
 drop policy if exists "Allow public task updates" on public.design_tasks;
+drop policy if exists "Allow editor task updates" on public.design_tasks;
+create policy "Allow editor task updates"
+on public.design_tasks
+for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.design_board_editors editor
+    where editor.email = lower(auth.jwt() ->> 'email')
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.design_board_editors editor
+    where editor.email = lower(auth.jwt() ->> 'email')
+  )
+);
 
 drop policy if exists "Allow public task deletes" on public.design_tasks;
+drop policy if exists "Allow editor task deletes" on public.design_tasks;
+create policy "Allow editor task deletes"
+on public.design_tasks
+for delete
+to authenticated
+using (
+  exists (
+    select 1
+    from public.design_board_editors editor
+    where editor.email = lower(auth.jwt() ->> 'email')
+  )
+);
+
+drop policy if exists "Allow editors to read own editor record" on public.design_board_editors;
+create policy "Allow editors to read own editor record"
+on public.design_board_editors
+for select
+to authenticated
+using (email = lower(auth.jwt() ->> 'email'));
+
+-- Add editor emails here after running the schema, for example:
+-- insert into public.design_board_editors (email, display_name)
+-- values ('designer@example.com', 'Designer')
+-- on conflict (email) do update set display_name = excluded.display_name;
 
 create or replace function public.set_design_tasks_updated_at()
 returns trigger

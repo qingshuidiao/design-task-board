@@ -129,11 +129,30 @@ h1 {
 .toolbar-actions,
 .drawer-actions,
 .drawer-actions > div,
+.editor-auth,
 .period-controls,
 .month-control {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.editor-auth {
+  min-height: 38px;
+  padding: 0 4px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #f8faff;
+}
+
+.editor-auth span {
+  max-width: 240px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .access-gate {
@@ -147,6 +166,31 @@ h1 {
     radial-gradient(circle at 50% 20%, rgba(77, 116, 255, 0.14), transparent 320px),
     linear-gradient(180deg, rgba(77, 116, 255, 0.08), rgba(77, 116, 255, 0.02) 320px),
     var(--bg);
+}
+
+.editor-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  display: none;
+  place-items: center;
+  padding: 24px;
+  background: rgba(22, 28, 42, 0.28);
+}
+
+.editor-gate.is-open {
+  display: grid;
+}
+
+.editor-card {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: var(--shadow);
 }
 
 body.is-auth-locked .access-gate {

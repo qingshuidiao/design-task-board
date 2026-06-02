@@ -34,9 +34,26 @@ https://fkkabjatwjlsfnchcbdr.supabase.co
 4. 复制 `supabase-schema.sql` 里的全部内容，粘贴进去。
 5. 点击 `Run`。
 
-完成后，网页会自动读取 `design_tasks` 这张表。当前安全默认值是：匿名访问只能读取任务，不能新增、编辑、删除或拖拽同步任务。
+完成后，网页会自动读取 `design_tasks` 这张表。当前安全默认值是：匿名访问只能读取任务；只有登录 Supabase Auth，且邮箱在 `design_board_editors` 允许名单中的成员，才能新增、编辑、删除或拖拽同步任务。
 
-不要把编辑口令或编辑权限校验放在前端页面里。前端只能做界面显示控制，不能承担真正的权限保护；如果要让指定成员可编辑，需要接 Supabase Auth、企业登录，或通过后端接口在服务端校验身份后再写入数据。
+不要把编辑口令或编辑权限校验放在前端页面里。前端只能做界面显示控制，真正的写入权限由 Supabase Auth + RLS 策略保护。
+
+## 编辑成员
+
+1. 在 Supabase 的 `Authentication` 里确认 Email 登录已启用。
+2. 在 `Authentication` 的 URL 配置里，把 GitHub Pages 看板地址加入允许跳转地址。
+3. 运行 `supabase-schema.sql`。
+4. 把可编辑成员邮箱写入 `design_board_editors`：
+
+```sql
+insert into public.design_board_editors (email, display_name)
+values
+  ('designer@example.com', 'Designer')
+on conflict (email) do update
+set display_name = excluded.display_name;
+```
+
+成员进入看板后点击“编辑登录”，输入允许名单里的邮箱，按邮件链接登录后即可编辑。
 
 ## 已支持
 

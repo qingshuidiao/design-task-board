@@ -184,6 +184,8 @@ let remoteChannel = null;
 let remoteRefreshTimer = null;
 let boardStarted = false;
 let accessRole = "viewer";
+let editorEmail = "";
+let authListener = null;
 
 const channel = createBroadcastChannel();
 
@@ -207,6 +209,15 @@ const els = {
   ownerFilter: document.querySelector("#ownerFilter"),
   statusFilter: document.querySelector("#statusFilter"),
   openTaskForm: document.querySelector("#openTaskForm"),
+  editorAuth: document.querySelector("#editorAuth"),
+  editorStatus: document.querySelector("#editorStatus"),
+  editorLogin: document.querySelector("#editorLogin"),
+  editorLogout: document.querySelector("#editorLogout"),
+  editorGate: document.querySelector("#editorGate"),
+  closeEditorGate: document.querySelector("#closeEditorGate"),
+  editorForm: document.querySelector("#editorForm"),
+  editorEmail: document.querySelector("#editorEmail"),
+  editorAuthError: document.querySelector("#editorAuthError"),
   drawer: document.querySelector("#taskDrawer"),
   closeDrawer: document.querySelector("#closeDrawer"),
   cancelForm: document.querySelector("#cancelForm"),
@@ -341,7 +352,14 @@ function applyEditMode() {
   const canEdit = hasEditAccess();
   document.body.classList.toggle("is-read-only", !canEdit);
   els.openTaskForm.hidden = !canEdit;
+  els.openTaskForm.disabled = !canEdit;
   els.importTasks.hidden = !canEdit;
+  els.importTasks.disabled = !canEdit;
+  if (els.editorStatus) {
+    els.editorStatus.textContent = canEdit ? `${editorEmail} · 可编辑` : (editorEmail ? `${editorEmail} · 只读` : "只读模式");
+  }
+  if (els.editorLogin) els.editorLogin.hidden = Boolean(editorEmail);
+  if (els.editorLogout) els.editorLogout.hidden = !editorEmail;
   render();
 }
 
@@ -370,6 +388,13 @@ function bindEvents() {
     if (!requireEditAccess()) return;
     openDrawer();
   });
+  els.editorLogin?.addEventListener("click", openEditorGate);
+  els.editorLogout?.addEventListener("click", signOutEditor);
+  els.closeEditorGate?.addEventListener("click", closeEditorGate);
+  els.editorGate?.addEventListener("click", (event) => {
+    if (event.target === els.editorGate) closeEditorGate();
+  });
+  els.editorForm?.addEventListener("submit", requestEditorLogin);
   els.closeDrawer.addEventListener("click", closeDrawer);
   els.cancelForm.addEventListener("click", closeDrawer);
 
@@ -405,6 +430,7 @@ function bindEvents() {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       closeDrawer();
+      closeEditorGate();
       hideContextMenu();
     }
   });
@@ -451,6 +477,7 @@ async function connectRemoteSync() {
     showToast("正在连接共享任务表");
     const { createClient } = await import(SUPABASE_CLIENT_URL);
     remoteClient = createClient(supabaseConfig.url, supabaseConfig.anonKey);
+    await initEditorAuth();
     await loadRemoteTasks();
     subscribeRemoteTasks();
     showToast("共享任务表已连接");
@@ -458,6 +485,120 @@ async function connectRemoteSync() {
     console.error(error);
     showToast("共享任务表未就绪，暂用本地模式");
   }
+}
+
+async function initEditorAuth() {
+  if (!remoteClient) return;
+
+  const { data, error } = await remoteClient.auth.getSession();
+  if (error) {
+    console.error(error);
+    return;
+  }
+  await updateEditorSession(data.session);
+
+  if (!authListener) {
+    const { data: listenerData } = remoteClient.auth.onAuthStateChange((_event, session) => {
+      updateEditorSession(session).catch((authError) => {
+        console.error(authError);
+        showToast("编辑登录状态刷新失败");
+      });
+    });
+    authListener = listenerData?.subscription || null;
+  }
+}
+
+async function updateEditorSession(session) {
+  const email = session?.user?.email?.toLowerCase() || "";
+  editorEmail = email;
+
+  if (!email) {
+    accessRole = "viewer";
+    applyEditMode();
+    return;
+  }
+
+  const isEditor = await isAllowedEditor(email);
+  accessRole = isEditor ? "editor" : "viewer";
+  applyEditMode();
+
+  if (!isEditor) {
+    showToast("已登录，但不在编辑名单中");
+  }
+}
+
+async function isAllowedEditor(email) {
+  if (!remoteClient || !email) return false;
+
+  const { data, error } = await remoteClient
+    .from("design_board_editors")
+    .select("email")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (error) {
+    console.error(error);
+    return false;
+  }
+  return Boolean(data);
+}
+
+function openEditorGate() {
+  if (!remoteClient) {
+    showToast("共享任务表未连接，暂不能登录编辑");
+    return;
+  }
+
+  els.editorAuthError.textContent = "";
+  els.editorEmail.value = editorEmail || "";
+  els.editorGate.classList.add("is-open");
+  els.editorGate.setAttribute("aria-hidden", "false");
+  window.setTimeout(() => els.editorEmail.focus(), 40);
+}
+
+function closeEditorGate() {
+  els.editorGate?.classList.remove("is-open");
+  els.editorGate?.setAttribute("aria-hidden", "true");
+}
+
+async function requestEditorLogin(event) {
+  event.preventDefault();
+  if (!remoteClient) return;
+
+  const email = els.editorEmail.value.trim().toLowerCase();
+  if (!email) return;
+
+  els.editorAuthError.textContent = "";
+  const { error } = await remoteClient.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: window.location.href.split("#")[0],
+    },
+  });
+
+  if (error) {
+    console.error(error);
+    els.editorAuthError.textContent = "登录链接发送失败";
+    return;
+  }
+
+  closeEditorGate();
+  showToast("登录链接已发送，请查看邮箱");
+}
+
+async function signOutEditor() {
+  if (!remoteClient) return;
+  const { error } = await remoteClient.auth.signOut();
+  if (error) {
+    console.error(error);
+    showToast("退出登录失败");
+    return;
+  }
+
+  editorEmail = "";
+  accessRole = "viewer";
+  applyEditMode();
+  showToast("已退出编辑登录");
 }
 
 async function loadRemoteTasks() {

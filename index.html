@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>设计任务实时看板</title>
-    <link rel="stylesheet" href="./styles.css?v=20260521-access2" />
+    <link rel="stylesheet" href="./styles.css?v=20260602-auth-editors" />
   </head>
   <body class="is-auth-locked">
     <section class="access-gate" id="accessGate" aria-label="访问验证">
@@ -32,6 +32,11 @@
         </div>
 
         <div class="top-actions">
+          <div class="editor-auth" id="editorAuth">
+            <span id="editorStatus">只读模式</span>
+            <button class="ghost-button" id="editorLogin" type="button">编辑登录</button>
+            <button class="ghost-button" id="editorLogout" type="button" hidden>退出登录</button>
+          </div>
           <button class="primary-button" id="openTaskForm">新增任务</button>
         </div>
       </header>
@@ -159,11 +164,28 @@
     </aside>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <section class="editor-gate" id="editorGate" aria-hidden="true">
+      <form class="editor-card" id="editorForm">
+        <div class="drawer-header">
+          <div>
+            <p class="eyebrow">编辑权限</p>
+            <h2>邮箱登录</h2>
+          </div>
+          <button class="icon-button subtle" id="closeEditorGate" type="button" aria-label="关闭" title="关闭">×</button>
+        </div>
+        <label class="field">
+          <span>邮箱</span>
+          <input id="editorEmail" type="email" autocomplete="email" placeholder="name@example.com" required />
+        </label>
+        <button class="primary-button" type="submit">发送登录链接</button>
+        <div class="access-error" id="editorAuthError" role="alert"></div>
+      </form>
+    </section>
     <div class="context-menu" id="contextMenu" role="menu" aria-hidden="true">
       <button type="button" id="contextCreateTask" role="menuitem">新增任务</button>
     </div>
 
     <script src="./supabase-config.js"></script>
-    <script src="./app.js?v=20260521-access2"></script>
+    <script src="./app.js?v=20260602-auth-editors"></script>
   </body>
 </html>
