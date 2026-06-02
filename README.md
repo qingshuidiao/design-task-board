@@ -41,7 +41,7 @@ https://fkkabjatwjlsfnchcbdr.supabase.co
 ## 编辑成员
 
 1. 在 Supabase 的 `Authentication` 里确认 Email 登录已启用。
-2. 在 `Authentication` 的 URL 配置里，把 GitHub Pages 看板地址加入允许跳转地址。
+2. 在 `Authentication` 的 URL 配置里，将 `Site URL` 设为 `https://qingshuidiao.github.io/design-task-board/`，并把同一个地址加入允许跳转地址。
 3. 运行 `supabase-schema.sql`。
 4. 把可编辑成员邮箱写入 `design_board_editors`：
 

@@ -572,7 +572,7 @@ async function requestEditorLogin(event) {
   const { error } = await remoteClient.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: window.location.href.split("#")[0],
+      emailRedirectTo: supabaseConfig.redirectUrl || window.location.href.split("#")[0],
     },
   });
 
