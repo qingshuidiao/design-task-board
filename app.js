@@ -1,6 +1,4 @@
 const STORAGE_KEY = "design-team-live-board-v1";
-const VIEW_ACCESS_CODE = "design2026";
-const VIEW_ACCESS_CODE_HASH = "020c355824f43c23a61f7fbeb5fde1acdfdf447747b52c670bfd965be7cd9a52";
 const CHANNEL_NAME = "design-team-board-sync";
 const laneCount = 7;
 const SUPABASE_CLIENT_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
@@ -167,7 +165,7 @@ const seedTasks = [
 let state = {
   weekStart: startOfWeek(new Date()),
   viewMode: "week",
-  tasks: loadTasks(),
+  tasks: [],
   filters: {
     search: "",
     owner: "all",
@@ -183,7 +181,7 @@ let remoteClient = null;
 let remoteChannel = null;
 let remoteRefreshTimer = null;
 let boardStarted = false;
-let accessRole = "viewer";
+let accessRole = "guest";
 let editorEmail = "";
 let authListener = null;
 
@@ -192,8 +190,10 @@ const channel = createBroadcastChannel();
 const els = {
   accessGate: document.querySelector("#accessGate"),
   accessForm: document.querySelector("#accessForm"),
-  accessCode: document.querySelector("#accessCode"),
+  accessEmail: document.querySelector("#accessEmail"),
+  accessHint: document.querySelector("#accessHint"),
   accessError: document.querySelector("#accessError"),
+  accessLogout: document.querySelector("#accessLogout"),
   liveClock: document.querySelector("#liveClock"),
   prevMonth: document.querySelector("#prevMonth"),
   nextMonth: document.querySelector("#nextMonth"),
@@ -245,7 +245,9 @@ init();
 
 async function init() {
   bindAccessGate();
-  lockBoard();
+  startBoard();
+  lockBoard("请输入成员邮箱，登录后查看看板");
+  await initRemoteSync();
 }
 
 function startBoard() {
@@ -256,39 +258,33 @@ function startBoard() {
   render();
   updateClock();
   window.setInterval(updateClock, 1000);
-  initRemoteSync();
 }
 
 function bindAccessGate() {
   ensureAccessGate();
-  if (!els.accessForm || !els.accessCode || !els.accessError) {
+  if (!els.accessForm || !els.accessEmail || !els.accessError) {
     return false;
   }
 
   els.accessForm.addEventListener("submit", handleAccessSubmit);
+  els.accessLogout?.addEventListener("click", signOutEditor);
   return true;
 }
 
 async function handleAccessSubmit(event) {
   event.preventDefault();
-  const code = els.accessCode.value.trim();
-  const role = await getAccessRole(code);
-  if (!role) {
-    els.accessError.textContent = "口令不正确";
-    els.accessCode.select();
+  const email = els.accessEmail.value.trim().toLowerCase();
+  if (!email) {
+    els.accessError.textContent = "请输入邮箱";
+    els.accessEmail.select();
     return;
   }
 
-  accessRole = role;
-  els.accessError.textContent = "";
-  els.accessCode.value = "";
-  unlockBoard();
-  startBoard();
-  applyEditMode();
+  await requestLoginLink(email, els.accessError);
 }
 
 function ensureAccessGate() {
-  if (els.accessForm && els.accessCode && els.accessError) return;
+  if (els.accessForm && els.accessEmail && els.accessError) return;
 
   const gate = document.createElement("section");
   gate.className = "access-gate";
@@ -298,48 +294,41 @@ function ensureAccessGate() {
     <form class="access-card" id="accessForm">
       <div class="mark">D</div>
       <h2>设计任务实时看板</h2>
-      <p>请输入设计组访问口令</p>
+      <p id="accessHint">请输入成员邮箱，登录后查看看板</p>
       <label class="field">
-        <span>访问口令</span>
-        <input id="accessCode" type="password" autocomplete="current-password" placeholder="输入口令后进入看板" required />
+        <span>邮箱</span>
+        <input id="accessEmail" type="email" autocomplete="email" placeholder="name@example.com" required />
       </label>
-      <button class="primary-button" type="submit">进入看板</button>
+      <button class="primary-button" type="submit">发送登录链接</button>
+      <button class="ghost-button" id="accessLogout" type="button" hidden>换邮箱登录</button>
       <div class="access-error" id="accessError" role="alert"></div>
     </form>
   `;
   document.body.prepend(gate);
   els.accessGate = gate;
   els.accessForm = gate.querySelector("#accessForm");
-  els.accessCode = gate.querySelector("#accessCode");
+  els.accessEmail = gate.querySelector("#accessEmail");
+  els.accessHint = gate.querySelector("#accessHint");
   els.accessError = gate.querySelector("#accessError");
+  els.accessLogout = gate.querySelector("#accessLogout");
 }
 
-async function getAccessRole(code) {
-  if (code === VIEW_ACCESS_CODE) return "viewer";
-
-  const hash = await hashText(code);
-  if (hash === VIEW_ACCESS_CODE_HASH) return "viewer";
-  return null;
-}
-
-function lockBoard() {
+function lockBoard(message = "请输入成员邮箱，登录后查看看板") {
   document.body.classList.add("is-auth-locked");
-  window.setTimeout(() => els.accessCode.focus(), 40);
+  if (els.accessHint) els.accessHint.textContent = message;
+  window.setTimeout(() => els.accessEmail?.focus(), 40);
 }
 
 function unlockBoard() {
   document.body.classList.remove("is-auth-locked");
 }
 
-async function hashText(value) {
-  if (!window.crypto?.subtle) return value;
-  const bytes = new TextEncoder().encode(value);
-  const buffer = await window.crypto.subtle.digest("SHA-256", bytes);
-  return [...new Uint8Array(buffer)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
 function hasEditAccess() {
   return accessRole === "editor";
+}
+
+function hasViewAccess() {
+  return accessRole === "viewer" || accessRole === "editor";
 }
 
 function requireEditAccess() {
@@ -465,25 +454,27 @@ function populateSelects() {
   });
 }
 
-function initRemoteSync() {
+async function initRemoteSync() {
   const isConfigured = Boolean(supabaseConfig.enabled && supabaseConfig.url && supabaseConfig.anonKey);
-  if (!isConfigured) return;
+  if (!isConfigured) {
+    lockBoard("登录服务未配置，暂不能查看看板");
+    return;
+  }
 
-  connectRemoteSync();
+  await connectRemoteSync();
 }
 
 async function connectRemoteSync() {
   try {
-    showToast("正在连接共享任务表");
+    showToast("正在连接登录服务");
     const { createClient } = await import(SUPABASE_CLIENT_URL);
     remoteClient = createClient(supabaseConfig.url, supabaseConfig.anonKey);
     await initEditorAuth();
-    await loadRemoteTasks();
-    subscribeRemoteTasks();
-    showToast("共享任务表已连接");
+    showToast("登录服务已连接");
   } catch (error) {
     console.error(error);
-    showToast("共享任务表未就绪，暂用本地模式");
+    lockBoard("登录服务未就绪，请稍后重试");
+    showToast("登录服务未就绪");
   }
 }
 
@@ -511,28 +502,44 @@ async function initEditorAuth() {
 async function updateEditorSession(session) {
   const email = session?.user?.email?.toLowerCase() || "";
   editorEmail = email;
+  if (els.accessEmail && email) els.accessEmail.value = email;
 
   if (!email) {
-    accessRole = "viewer";
+    accessRole = "guest";
+    state.tasks = [];
+    lockBoard("请输入成员邮箱，登录后查看看板");
     applyEditMode();
     return;
   }
 
-  const isEditor = await isAllowedEditor(email);
-  accessRole = isEditor ? "editor" : "viewer";
-  applyEditMode();
-
-  if (!isEditor) {
-    showToast("已登录，但不在编辑名单中");
+  const member = await getBoardMember(email);
+  if (!member) {
+    accessRole = "guest";
+    state.tasks = [];
+    lockBoard("当前邮箱不在查看名单中");
+    if (els.accessLogout) els.accessLogout.hidden = false;
+    if (els.accessError) els.accessError.textContent = "已登录，但不在查看名单中";
+    applyEditMode();
+    return;
   }
+
+  accessRole = member.role === "editor" ? "editor" : "viewer";
+  unlockBoard();
+  if (els.accessLogout) els.accessLogout.hidden = true;
+  if (els.accessError) els.accessError.textContent = "";
+  applyEditMode();
+  await loadRemoteTasks();
+  subscribeRemoteTasks();
+
+  showToast(accessRole === "editor" ? "已进入可编辑模式" : "已进入只读模式");
 }
 
-async function isAllowedEditor(email) {
+async function getBoardMember(email) {
   if (!remoteClient || !email) return false;
 
   const { data, error } = await remoteClient
-    .from("design_board_editors")
-    .select("email")
+    .from("design_board_members")
+    .select("email, role")
     .eq("email", email)
     .maybeSingle();
 
@@ -540,7 +547,7 @@ async function isAllowedEditor(email) {
     console.error(error);
     return false;
   }
-  return Boolean(data);
+  return data || false;
 }
 
 function openEditorGate() {
@@ -568,7 +575,16 @@ async function requestEditorLogin(event) {
   const email = els.editorEmail.value.trim().toLowerCase();
   if (!email) return;
 
-  els.editorAuthError.textContent = "";
+  await requestLoginLink(email, els.editorAuthError);
+}
+
+async function requestLoginLink(email, errorEl) {
+  if (!remoteClient) {
+    if (errorEl) errorEl.textContent = "登录服务未连接";
+    return;
+  }
+
+  if (errorEl) errorEl.textContent = "";
   const { error } = await remoteClient.auth.signInWithOtp({
     email,
     options: {
@@ -578,12 +594,16 @@ async function requestEditorLogin(event) {
 
   if (error) {
     console.error(error);
-    els.editorAuthError.textContent = "登录链接发送失败";
+    if (errorEl) errorEl.textContent = "登录链接发送失败";
     return;
   }
 
   closeEditorGate();
   showToast("登录链接已发送，请查看邮箱");
+  if (errorEl) errorEl.textContent = "";
+  if (errorEl === els.accessError && els.accessHint) {
+    els.accessHint.textContent = "登录链接已发送，请查看邮箱";
+  }
 }
 
 async function signOutEditor() {
@@ -596,13 +616,15 @@ async function signOutEditor() {
   }
 
   editorEmail = "";
-  accessRole = "viewer";
+  accessRole = "guest";
+  state.tasks = [];
+  lockBoard("请输入成员邮箱，登录后查看看板");
   applyEditMode();
-  showToast("已退出编辑登录");
+  showToast("已退出登录");
 }
 
 async function loadRemoteTasks() {
-  if (!remoteClient) return;
+  if (!remoteClient || !hasViewAccess()) return;
 
   const { data, error } = await remoteClient
     .from("design_tasks")
@@ -614,7 +636,6 @@ async function loadRemoteTasks() {
 
   if (Array.isArray(data) && data.length) {
     state.tasks = data.map(remoteRowToTask).map(normalizeTask).filter(Boolean);
-    persist(false);
     render();
     return;
   }

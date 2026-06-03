@@ -4,19 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>设计任务实时看板</title>
-    <link rel="stylesheet" href="./styles.css?v=20260602-auth-editors" />
+    <link rel="stylesheet" href="./styles.css?v=20260603-member-auth" />
   </head>
   <body class="is-auth-locked">
     <section class="access-gate" id="accessGate" aria-label="访问验证">
       <form class="access-card" id="accessForm">
         <div class="mark">D</div>
         <h2>设计任务实时看板</h2>
-        <p>请输入设计组访问口令</p>
+        <p id="accessHint">请输入成员邮箱，登录后查看看板</p>
         <label class="field">
-          <span>访问口令</span>
-          <input id="accessCode" type="password" autocomplete="current-password" placeholder="输入口令后进入看板" required />
+          <span>邮箱</span>
+          <input id="accessEmail" type="email" autocomplete="email" placeholder="name@example.com" required />
         </label>
-        <button class="primary-button" type="submit">进入看板</button>
+        <button class="primary-button" type="submit">发送登录链接</button>
+        <button class="ghost-button" id="accessLogout" type="button" hidden>换邮箱登录</button>
         <div class="access-error" id="accessError" role="alert"></div>
       </form>
     </section>
@@ -186,6 +187,6 @@
     </div>
 
     <script src="./supabase-config.js"></script>
-    <script src="./app.js?v=20260602-auth-editors"></script>
+    <script src="./app.js?v=20260603-member-auth"></script>
   </body>
 </html>

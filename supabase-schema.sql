@@ -26,19 +26,51 @@ create table if not exists public.design_board_editors (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.design_board_members (
+  email text primary key check (email = lower(email)),
+  display_name text not null default '',
+  role text not null default 'viewer',
+  created_at timestamptz not null default now()
+);
+
+alter table public.design_board_members
+drop constraint if exists design_board_members_role_check;
+
+alter table public.design_board_members
+add constraint design_board_members_role_check
+check (role in ('viewer', 'editor'));
+
+insert into public.design_board_members (email, display_name, role)
+select email, display_name, 'editor'
+from public.design_board_editors
+on conflict (email) do update
+set
+  display_name = excluded.display_name,
+  role = 'editor';
+
 alter table public.design_board_editors enable row level security;
+alter table public.design_board_members enable row level security;
 
 grant usage on schema public to anon, authenticated;
-grant select on public.design_tasks to anon, authenticated;
+revoke all on public.design_tasks from anon;
+grant select on public.design_tasks to authenticated;
 grant insert, update, delete on public.design_tasks to authenticated;
 grant select on public.design_board_editors to authenticated;
+grant select on public.design_board_members to authenticated;
 
 drop policy if exists "Allow public task reads" on public.design_tasks;
-create policy "Allow public task reads"
+drop policy if exists "Allow member task reads" on public.design_tasks;
+create policy "Allow member task reads"
 on public.design_tasks
 for select
-to anon, authenticated
-using (true);
+to authenticated
+using (
+  exists (
+    select 1
+    from public.design_board_members member
+    where member.email = lower(auth.jwt() ->> 'email')
+  )
+);
 
 drop policy if exists "Allow public task inserts" on public.design_tasks;
 drop policy if exists "Allow editor task inserts" on public.design_tasks;
@@ -49,8 +81,9 @@ to authenticated
 with check (
   exists (
     select 1
-    from public.design_board_editors editor
-    where editor.email = lower(auth.jwt() ->> 'email')
+    from public.design_board_members member
+    where member.email = lower(auth.jwt() ->> 'email')
+      and member.role = 'editor'
   )
 );
 
@@ -63,15 +96,17 @@ to authenticated
 using (
   exists (
     select 1
-    from public.design_board_editors editor
-    where editor.email = lower(auth.jwt() ->> 'email')
+    from public.design_board_members member
+    where member.email = lower(auth.jwt() ->> 'email')
+      and member.role = 'editor'
   )
 )
 with check (
   exists (
     select 1
-    from public.design_board_editors editor
-    where editor.email = lower(auth.jwt() ->> 'email')
+    from public.design_board_members member
+    where member.email = lower(auth.jwt() ->> 'email')
+      and member.role = 'editor'
   )
 );
 
@@ -84,8 +119,9 @@ to authenticated
 using (
   exists (
     select 1
-    from public.design_board_editors editor
-    where editor.email = lower(auth.jwt() ->> 'email')
+    from public.design_board_members member
+    where member.email = lower(auth.jwt() ->> 'email')
+      and member.role = 'editor'
   )
 );
 
@@ -96,10 +132,21 @@ for select
 to authenticated
 using (email = lower(auth.jwt() ->> 'email'));
 
--- Add editor emails here after running the schema, for example:
--- insert into public.design_board_editors (email, display_name)
--- values ('designer@example.com', 'Designer')
--- on conflict (email) do update set display_name = excluded.display_name;
+drop policy if exists "Allow members to read own member record" on public.design_board_members;
+create policy "Allow members to read own member record"
+on public.design_board_members
+for select
+to authenticated
+using (email = lower(auth.jwt() ->> 'email'));
+
+-- Add board members here after running the schema, for example:
+-- insert into public.design_board_members (email, display_name, role)
+-- values
+--   ('viewer@example.com', 'Viewer', 'viewer'),
+--   ('designer@example.com', 'Designer', 'editor')
+-- on conflict (email) do update
+-- set display_name = excluded.display_name,
+--     role = excluded.role;
 
 create or replace function public.set_design_tasks_updated_at()
 returns trigger
