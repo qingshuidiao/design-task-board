@@ -33,6 +33,11 @@ create table if not exists public.design_board_members (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.design_board_keepalive (
+  id text primary key default 'keepalive' check (id = 'keepalive'),
+  created_at timestamptz not null default now()
+);
+
 alter table public.design_board_members
 drop constraint if exists design_board_members_role_check;
 
@@ -50,6 +55,7 @@ set
 
 alter table public.design_board_editors enable row level security;
 alter table public.design_board_members enable row level security;
+alter table public.design_board_keepalive enable row level security;
 
 grant usage on schema public to anon, authenticated;
 revoke all on public.design_tasks from anon;
@@ -57,6 +63,7 @@ grant select on public.design_tasks to authenticated;
 grant insert, update, delete on public.design_tasks to authenticated;
 grant select on public.design_board_editors to authenticated;
 grant select on public.design_board_members to authenticated;
+grant select on public.design_board_keepalive to anon, authenticated;
 
 drop policy if exists "Allow public task reads" on public.design_tasks;
 drop policy if exists "Allow member task reads" on public.design_tasks;
@@ -138,6 +145,17 @@ on public.design_board_members
 for select
 to authenticated
 using (email = lower(auth.jwt() ->> 'email'));
+
+drop policy if exists "Allow keepalive reads" on public.design_board_keepalive;
+create policy "Allow keepalive reads"
+on public.design_board_keepalive
+for select
+to anon, authenticated
+using (true);
+
+insert into public.design_board_keepalive (id)
+values ('keepalive')
+on conflict (id) do nothing;
 
 -- Add board members here after running the schema, for example:
 -- insert into public.design_board_members (email, display_name, role)

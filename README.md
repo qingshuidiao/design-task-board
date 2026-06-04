@@ -57,6 +57,28 @@ set display_name = excluded.display_name,
 
 成员打开看板后输入邮箱，按邮件链接登录；不在名单中的邮箱不能查看任务。
 
+## 防止免费版 Supabase 休眠
+
+Supabase 免费项目如果连续一段时间没有活跃请求，可能会被暂停。这个仓库已经加入 GitHub Actions 定时任务：
+
+```text
+.github/workflows/keep-supabase-awake.yml
+```
+
+它会每 5 天自动做两件事：
+
+1. 访问一次线上看板页面。
+2. 读取一次 Supabase 的 `design_board_keepalive` 表。
+
+启用方式：
+
+1. 在 Supabase 的 `SQL Editor` 里运行 `supabase-keepalive.sql`。
+2. 把代码推送到 GitHub。
+3. 打开 GitHub 仓库的 `Actions`，确认 `Keep Supabase Awake` 工作流已启用。
+4. 可以先点 `Run workflow` 手动跑一次，看到绿色成功后就会按计划自动运行。
+
+这个定时任务只读取 `design_board_keepalive` 的一行公开探活数据，不读取、不新增、不修改真实任务。
+
 ## 已支持
 
 - 周视图任务排期，默认周一到周日

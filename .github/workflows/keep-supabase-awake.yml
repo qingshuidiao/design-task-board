@@ -1,0 +1,42 @@
+name: Keep Supabase Awake
+
+on:
+  schedule:
+    # Every 5 days at 09:17 Beijing time.
+    - cron: "17 1 */5 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Ping board page
+        run: |
+          curl --fail --silent --show-error --location --max-time 20 \
+            "https://qingshuidiao.github.io/design-task-board/" \
+            > /dev/null
+
+      - name: Read Supabase keepalive row
+        env:
+          SUPABASE_URL: https://fkkabjatwjlsfnchcbdr.supabase.co
+          SUPABASE_ANON_KEY: sb_publishable_7du5U-OmchnB4xqw7JDPtQ_S9cbxeuK
+        run: |
+          response="$(
+            curl --fail --silent --show-error --location --max-time 20 \
+              "${SUPABASE_URL}/rest/v1/design_board_keepalive?select=id,created_at&id=eq.keepalive" \
+              -H "apikey: ${SUPABASE_ANON_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+              -H "Accept: application/json"
+          )"
+
+          echo "${response}"
+
+          if [ "${response}" = "[]" ]; then
+            echo "::error::Supabase keepalive table is reachable, but the keepalive row is missing."
+            exit 1
+          fi
