@@ -1,4 +1,4 @@
-const STORAGE_KEY = "design-team-live-board-v1";
+const LEGACY_STORAGE_KEYS = ["design-team-live-board-v1", "design-team-board-access-v1"];
 const CHANNEL_NAME = "design-team-board-sync";
 const laneCount = 7;
 const SUPABASE_CLIENT_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
@@ -15,64 +15,6 @@ const statusText = {
   done: "已完成",
   leave: "请假",
 };
-
-const seedTasks = [
-  {
-    id: "sample-task-1",
-    title: "示例任务 A",
-    owner: "di",
-    start: "2026-06-01",
-    end: "2026-06-02",
-    lane: 1,
-    tone: "blue",
-    status: "open",
-    note: "",
-  },
-  {
-    id: "sample-task-2",
-    title: "示例任务 B",
-    owner: "di",
-    start: "2026-06-03",
-    end: "2026-06-03",
-    lane: 2,
-    tone: "blue",
-    status: "open",
-    note: "",
-  },
-  {
-    id: "sample-task-3",
-    title: "示例任务 C",
-    owner: "cai",
-    start: "2026-06-02",
-    end: "2026-06-04",
-    lane: 3,
-    tone: "cyan",
-    status: "done",
-    note: "",
-  },
-  {
-    id: "sample-task-4",
-    title: "示例任务 D",
-    owner: "cai",
-    start: "2026-06-04",
-    end: "2026-06-05",
-    lane: 4,
-    tone: "cyan",
-    status: "open",
-    note: "",
-  },
-  {
-    id: "sample-task-5",
-    title: "示例任务 E",
-    owner: "yue",
-    start: "2026-06-01",
-    end: "2026-06-01",
-    lane: 5,
-    tone: "apricot",
-    status: "leave",
-    note: "",
-  },
-];
 
 let state = {
   weekStart: startOfWeek(new Date()),
@@ -156,6 +98,7 @@ const els = {
 init();
 
 async function init() {
+  clearLegacyStorage();
   bindAccessGate();
   startBoard();
   lockBoard("请输入成员邮箱，登录后查看看板");
@@ -339,18 +282,10 @@ function bindEvents() {
   document.addEventListener("pointermove", handleResizeMove);
   document.addEventListener("pointerup", handleResizeEnd);
 
-  window.addEventListener("storage", (event) => {
-    if (event.key !== STORAGE_KEY || !event.newValue) return;
-    const nextTasks = safeParse(event.newValue, state.tasks);
-    state.tasks = Array.isArray(nextTasks) ? nextTasks.map(normalizeTask).filter(Boolean) : state.tasks;
-    render();
-  });
-
   if (channel) {
     channel.addEventListener("message", (event) => {
       if (event.data?.type !== "tasks-updated") return;
       state.tasks = Array.isArray(event.data.tasks) ? event.data.tasks.map(normalizeTask).filter(Boolean) : state.tasks;
-      persist(false);
       render();
       showToast("任务已实时同步");
     });
@@ -1207,7 +1142,6 @@ function setViewMode(mode) {
 }
 
 function persist(shouldBroadcast = true) {
-  writeStorage(STORAGE_KEY, JSON.stringify(state.tasks));
   if (shouldBroadcast && channel) {
     try {
       channel.postMessage({ type: "tasks-updated", tasks: state.tasks });
@@ -1217,24 +1151,9 @@ function persist(shouldBroadcast = true) {
   }
 }
 
-function loadTasks() {
-  const saved = readStorage(STORAGE_KEY);
-  if (!saved) return seedTasks;
-  const parsed = safeParse(saved, seedTasks);
-  return Array.isArray(parsed) ? parsed.map(normalizeTask).filter(Boolean) : seedTasks;
-}
-
-function readStorage(key) {
+function clearLegacyStorage() {
   try {
-    return window.localStorage?.getItem(key) || "";
-  } catch {
-    return "";
-  }
-}
-
-function writeStorage(key, value) {
-  try {
-    window.localStorage?.setItem(key, value);
+    LEGACY_STORAGE_KEYS.forEach((key) => window.localStorage?.removeItem(key));
   } catch (error) {
     console.warn(error);
   }
