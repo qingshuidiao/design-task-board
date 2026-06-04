@@ -23,9 +23,14 @@ jobs:
 
       - name: Read Supabase keepalive row
         env:
-          SUPABASE_URL: https://fkkabjatwjlsfnchcbdr.supabase.co
-          SUPABASE_ANON_KEY: sb_publishable_7du5U-OmchnB4xqw7JDPtQ_S9cbxeuK
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_ANON_KEY}" ]; then
+            echo "::error::Missing SUPABASE_URL or SUPABASE_ANON_KEY repository secret."
+            exit 1
+          fi
+
           response="$(
             curl --fail --silent --show-error --location --max-time 20 \
               "${SUPABASE_URL}/rest/v1/design_board_keepalive?select=id,created_at&id=eq.keepalive" \
