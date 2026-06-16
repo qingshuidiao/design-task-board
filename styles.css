@@ -9,6 +9,7 @@
   --primary-dark: #315be7;
   --shadow: 0 20px 60px rgba(35, 48, 78, 0.12);
   --row-height: 86px;
+  --visible-lane-count: 7;
   --radius: 8px;
   --blue-bg: #cbd8ff;
   --blue-fg: #315be7;
@@ -520,7 +521,7 @@ textarea:focus {
 
 .board-body {
   position: relative;
-  min-height: calc(var(--row-height) * 7);
+  min-height: calc(var(--row-height) * var(--visible-lane-count));
   background: #fff;
   overflow: hidden;
 }
@@ -529,7 +530,7 @@ textarea:focus {
 .task-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(150px, 1fr));
-  grid-template-rows: repeat(7, var(--row-height));
+  grid-template-rows: repeat(var(--visible-lane-count), var(--row-height));
 }
 
 .board-body.is-month-view {

@@ -4,7 +4,7 @@
 
 ## 使用
 
-直接打开 `index.html`，或在当前目录启动本地服务：
+如果只是看静态页面，可以直接打开 `index.html`。如果需要登录、多人同步或 Supabase 功能，请在当前目录启动本地服务：
 
 ```bash
 python3 -m http.server 4173
@@ -15,6 +15,8 @@ python3 -m http.server 4173
 ```text
 http://localhost:4173
 ```
+
+不要用 `file://.../index.html` 做登录测试；本地文件模式下浏览器可能会拦截 Supabase 登录请求。
 
 ## 功能
 

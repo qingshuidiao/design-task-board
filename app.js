@@ -1,6 +1,7 @@
 const LEGACY_STORAGE_KEYS = ["design-team-live-board-v1", "design-team-board-access-v1"];
 const CHANNEL_NAME = "design-team-board-sync";
-const laneCount = 7;
+const minLaneCount = 7;
+const maxLaneCount = 99;
 const SUPABASE_CLIENT_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 const supabaseConfig = window.BOARD_SUPABASE_CONFIG || {};
 
@@ -170,6 +171,9 @@ function ensureAccessGate() {
 
 function lockBoard(message = "请输入成员邮箱，登录后查看看板") {
   document.body.classList.add("is-auth-locked");
+  if (window.location.protocol === "file:") {
+    message = "当前是本地文件打开，请用 http://localhost:4173 打开后登录";
+  }
   if (els.accessHint) els.accessHint.textContent = message;
   window.setTimeout(() => els.accessEmail?.focus(), 40);
 }
@@ -299,6 +303,7 @@ function populateSelects() {
     els.ownerFilter.append(filterOption);
     els.taskOwner.append(formOption);
   });
+  els.taskLane.max = String(maxLaneCount);
 }
 
 async function initRemoteSync() {
@@ -431,17 +436,24 @@ async function requestLoginLink(email, errorEl) {
     return;
   }
 
+  const localFileMessage = getLocalFileLoginMessage();
+  if (localFileMessage) {
+    if (errorEl) errorEl.textContent = localFileMessage;
+    showToast("请用本地服务地址打开");
+    return;
+  }
+
   if (errorEl) errorEl.textContent = "";
   const { error } = await remoteClient.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: supabaseConfig.redirectUrl || window.location.href.split("#")[0],
+      emailRedirectTo: getLoginRedirectUrl(),
     },
   });
 
   if (error) {
     console.error(error);
-    if (errorEl) errorEl.textContent = "登录链接发送失败";
+    if (errorEl) errorEl.textContent = getLoginErrorMessage(error);
     return;
   }
 
@@ -451,6 +463,31 @@ async function requestLoginLink(email, errorEl) {
   if (errorEl === els.accessError && els.accessHint) {
     els.accessHint.textContent = "登录链接已发送，请查看邮箱";
   }
+}
+
+function getLocalFileLoginMessage() {
+  if (window.location.protocol !== "file:") return "";
+  return "当前是直接打开本地文件，登录请求会被浏览器拦截。请在项目目录启动本地服务后，用 http://localhost:4173 打开。";
+}
+
+function getLoginRedirectUrl() {
+  const currentUrl = window.location.href.split("#")[0];
+  const isLocalPreview = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+  return isLocalPreview ? currentUrl : (supabaseConfig.redirectUrl || currentUrl);
+}
+
+function getLoginErrorMessage(error) {
+  const message = String(error?.message || "").toLowerCase();
+  if (message.includes("redirect")) {
+    return "登录跳转地址没有加入 Supabase 允许列表，请检查 Authentication 的 URL 配置。";
+  }
+  if (message.includes("rate") || message.includes("too many")) {
+    return "登录邮件发送太频繁了，请稍等几分钟再试。";
+  }
+  if (message.includes("fetch") || message.includes("network")) {
+    return "网络或浏览器拦截导致登录失败，请确认网络正常，并用 http://localhost:4173 或线上地址打开。";
+  }
+  return "登录链接发送失败，请检查邮箱是否正确、Supabase 邮件服务是否可用。";
 }
 
 async function signOutEditor() {
@@ -603,9 +640,12 @@ function render() {
 function renderWeek(period) {
   els.boardHeader.classList.remove("is-month-header");
   els.taskGrid.className = "task-grid";
+  const tasks = getVisibleTasks(period);
+  const layout = buildWeekLayout(tasks);
+  els.boardBody.style.setProperty("--visible-lane-count", String(layout.laneCount));
   renderWeekHeader(period.days);
-  renderWeekGrid(period.days);
-  renderWeekTasks(period);
+  renderWeekGrid(period.days, layout.laneCount);
+  renderWeekTasks(period, tasks, layout);
 }
 
 function renderWeekHeader(weekDays) {
@@ -625,11 +665,11 @@ function renderWeekHeader(weekDays) {
     .join("");
 }
 
-function renderWeekGrid(weekDays) {
+function renderWeekGrid(weekDays, laneTotal = minLaneCount) {
   const today = toISODate(new Date());
   const weekDates = weekDays.map(toISODate);
   const cells = [];
-  for (let lane = 1; lane <= laneCount; lane += 1) {
+  for (let lane = 1; lane <= laneTotal; lane += 1) {
     for (let day = 0; day < 7; day += 1) {
       cells.push(
         `<div class="grid-cell ${weekDates[day] === today ? "is-today-cell" : ""}" data-day="${day}" data-lane="${lane}"></div>`,
@@ -639,15 +679,15 @@ function renderWeekGrid(weekDays) {
   els.boardGrid.innerHTML = cells.join("");
 }
 
-function renderWeekTasks(period) {
-  const tasks = getVisibleTasks(period);
-
+function renderWeekTasks(period, tasks, layout) {
   if (!tasks.length) {
     els.taskGrid.innerHTML = `<div class="empty-state">本周暂无匹配任务</div>`;
     return;
   }
 
-  els.taskGrid.innerHTML = tasks.map((task) => renderWeekTask(task, period.days)).join("");
+  els.taskGrid.innerHTML = tasks
+    .map((task) => renderWeekTask(task, period.days, layout.lanesByTaskId.get(task.id) || task.lane))
+    .join("");
 
   els.taskGrid.querySelectorAll(".task-card").forEach((card) => {
     card.addEventListener("click", () => openDrawer(card.dataset.id));
@@ -678,7 +718,7 @@ function renderWeekTasks(period) {
   }
 }
 
-function renderWeekTask(task, weekDays) {
+function renderWeekTask(task, weekDays, lane) {
   const visibleStart = maxDate(parseISODate(task.start), weekDays[0]);
   const visibleEnd = minDate(parseISODate(task.end), weekDays[6]);
   const startIndex = differenceInDays(weekDays[0], visibleStart);
@@ -693,7 +733,7 @@ function renderWeekTask(task, weekDays) {
       class="task-card tone-${tone} is-${task.status}"
       draggable="${hasEditAccess() ? "true" : "false"}"
       data-id="${task.id}"
-      style="grid-column: ${startIndex + 1} / span ${duration}; grid-row: ${task.lane};"
+      style="grid-column: ${startIndex + 1} / span ${duration}; grid-row: ${lane};"
       title="${escapeHtml(task.title)}"
     >
       <span class="resize-handle left" data-side="left" data-id="${task.id}"></span>
@@ -815,6 +855,53 @@ function getVisibleTasks(period) {
     .sort((a, b) => a.lane - b.lane || a.start.localeCompare(b.start) || a.title.localeCompare(b.title));
 }
 
+function buildWeekLayout(tasks) {
+  const placedTasks = [];
+  const lanesByTaskId = new Map();
+
+  tasks.forEach((task) => {
+    const preferredLane = clamp(Number(task.lane || 1), 1, maxLaneCount);
+    const lane = findOpenLane(task.start, task.end, preferredLane, task.id, placedTasks);
+    placedTasks.push({
+      id: task.id,
+      start: task.start,
+      end: task.end,
+      lane,
+    });
+    lanesByTaskId.set(task.id, lane);
+  });
+
+  const highestLayoutLane = placedTasks.reduce((max, task) => Math.max(max, task.lane), minLaneCount);
+  const highestSavedLane = tasks.reduce((max, task) => Math.max(max, Number(task.lane || 1)), minLaneCount);
+
+  return {
+    lanesByTaskId,
+    laneCount: clamp(Math.max(highestLayoutLane, highestSavedLane), minLaneCount, maxLaneCount),
+  };
+}
+
+function findOpenLane(start, end, preferredLane = 1, excludeId = null, tasks = state.tasks) {
+  const firstLane = clamp(Number(preferredLane || 1), 1, maxLaneCount);
+  const lanes = [];
+
+  for (let lane = firstLane; lane <= maxLaneCount; lane += 1) {
+    lanes.push(lane);
+  }
+
+  for (let lane = 1; lane < firstLane; lane += 1) {
+    lanes.push(lane);
+  }
+
+  return lanes.find((lane) => !isLaneOccupied(lane, start, end, excludeId, tasks)) || firstLane;
+}
+
+function isLaneOccupied(lane, start, end, excludeId = null, tasks = state.tasks) {
+  return tasks.some((task) => {
+    if (task.id === excludeId) return false;
+    return Number(task.lane) === lane && rangesOverlap(task.start, task.end, start, end);
+  });
+}
+
 async function handleSubmit(event) {
   event.preventDefault();
   if (!requireEditAccess()) return;
@@ -826,7 +913,8 @@ async function handleSubmit(event) {
     return;
   }
 
-  const lane = clamp(Number(els.taskLane.value), 1, laneCount);
+  const requestedLane = clamp(Number(els.taskLane.value), 1, maxLaneCount);
+  const lane = findOpenLane(start, end, requestedLane, els.taskId.value || null);
   const payload = {
     id: els.taskId.value || createId(),
     title: els.taskTitle.value.trim(),
@@ -849,7 +937,7 @@ async function handleSubmit(event) {
   persist();
   render();
   closeDrawer();
-  showToast("任务已保存");
+  showToast(lane === requestedLane ? "任务已保存" : `第 ${requestedLane} 行已有任务，已放到第 ${lane} 行`);
   await syncTaskToRemote(payload);
 }
 
@@ -875,13 +963,16 @@ function openDrawer(id = null, overrides = {}) {
 
   const task = id ? state.tasks.find((item) => item.id === id) : null;
   const firstDay = toISODate(getWeekDays(state.weekStart)[0]);
+  const defaultStart = overrides.start || firstDay;
+  const defaultEnd = overrides.end || overrides.start || firstDay;
+  const defaultLane = findOpenLane(defaultStart, defaultEnd, overrides.lane || 1);
   const defaultTask = {
     id: "",
     title: "",
     owner: owners[0].id,
-    start: overrides.start || firstDay,
-    end: overrides.end || overrides.start || firstDay,
-    lane: overrides.lane || 1,
+    start: defaultStart,
+    end: defaultEnd,
+    lane: defaultLane,
     tone: owners[0].tone,
     status: "open",
     note: "",
@@ -896,6 +987,7 @@ function openDrawer(id = null, overrides = {}) {
   els.taskStatus.value = data.status;
   els.taskStart.value = data.start;
   els.taskEnd.value = data.end;
+  els.taskLane.max = String(maxLaneCount);
   els.taskLane.value = data.lane;
   els.taskNote.value = data.note || "";
   els.deleteTask.style.visibility = canEdit && task ? "visible" : "hidden";
@@ -983,15 +1075,19 @@ function handleTaskDrop(event) {
 
   const duration = differenceInDays(parseISODate(task.start), parseISODate(task.end));
   const newStart = getWeekDays(state.weekStart)[cell.day];
-  task.start = toISODate(newStart);
-  task.end = toISODate(addDays(newStart, duration));
-  task.lane = cell.lane;
+  const newStartIso = toISODate(newStart);
+  const newEndIso = toISODate(addDays(newStart, duration));
+  const requestedLane = cell.lane;
+  const openLane = findOpenLane(newStartIso, newEndIso, requestedLane, task.id);
+  task.start = newStartIso;
+  task.end = newEndIso;
+  task.lane = openLane;
 
   dragTaskId = null;
   clearCellHighlight();
   persist();
   render();
-  showToast("任务已移动");
+  showToast(openLane === requestedLane ? "任务已移动" : `目标行已有任务，已放到第 ${openLane} 行`);
   syncTaskToRemote(task);
 }
 
@@ -1033,9 +1129,19 @@ function handleResizeMove(event) {
 function handleResizeEnd() {
   if (!hasEditAccess() || !resizeState) return;
   const task = state.tasks.find((item) => item.id === resizeState.id);
+  let movedLane = null;
+  if (task) {
+    const requestedLane = task.lane;
+    const openLane = findOpenLane(task.start, task.end, requestedLane, task.id);
+    if (openLane !== requestedLane) {
+      task.lane = openLane;
+      movedLane = openLane;
+    }
+  }
   resizeState = null;
   persist();
-  showToast("任务日期已调整");
+  render();
+  showToast(movedLane ? `日期已调整，并放到第 ${movedLane} 行` : "任务日期已调整");
   if (task) syncTaskToRemote(task);
 }
 
@@ -1176,7 +1282,7 @@ function normalizeTask(task) {
     owner,
     start: task.start,
     end: task.end,
-    lane: clamp(Number(task.lane || 1), 1, laneCount),
+    lane: clamp(Number(task.lane || 1), 1, maxLaneCount),
     tone: getOwner(owner).tone,
     status: normalizeStatus(task.status),
     note: String(task.note || "").slice(0, 160),
@@ -1191,7 +1297,9 @@ function getCellFromPointer(x, y) {
   const rect = els.boardBody.getBoundingClientRect();
   if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return null;
   const day = clamp(Math.floor(((x - rect.left) / rect.width) * 7), 0, 6);
-  const lane = clamp(Math.floor((y - rect.top) / Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-height"))) + 1, 1, laneCount);
+  const laneTotal = Number(els.boardBody.style.getPropertyValue("--visible-lane-count")) || minLaneCount;
+  const rowHeight = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-height"));
+  const lane = clamp(Math.floor((y - rect.top) / rowHeight) + 1, 1, laneTotal);
   return { day, lane };
 }
 
