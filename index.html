@@ -4,12 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>设计任务实时看板</title>
-    <link rel="stylesheet" href="./styles.css?v=20260616-layout-login" />
+    <link rel="stylesheet" href="./styles.css?v=20260617-flat-logo" />
   </head>
   <body class="is-auth-locked">
     <section class="access-gate" id="accessGate" aria-label="访问验证">
       <form class="access-card" id="accessForm">
-        <div class="mark">D</div>
+        <div class="mark" aria-hidden="true">
+          <svg class="mark-icon" viewBox="0 0 48 48" focusable="false">
+            <rect class="mark-tile" x="12" y="12" width="10" height="10" rx="3" />
+            <rect class="mark-tile" x="26" y="12" width="10" height="10" rx="3" />
+            <rect class="mark-tile" x="12" y="26" width="10" height="10" rx="3" />
+            <rect class="mark-focus" x="26" y="26" width="10" height="10" rx="3" />
+          </svg>
+        </div>
         <h2>设计任务实时看板</h2>
         <p id="accessHint">请输入成员邮箱，登录后查看看板</p>
         <label class="field">
@@ -25,7 +32,14 @@
     <div class="app-shell">
       <header class="topbar">
         <div class="brand">
-          <div class="mark">D</div>
+          <div class="mark" aria-hidden="true">
+            <svg class="mark-icon" viewBox="0 0 48 48" focusable="false">
+              <rect class="mark-tile" x="12" y="12" width="10" height="10" rx="3" />
+              <rect class="mark-tile" x="26" y="12" width="10" height="10" rx="3" />
+              <rect class="mark-tile" x="12" y="26" width="10" height="10" rx="3" />
+              <rect class="mark-focus" x="26" y="26" width="10" height="10" rx="3" />
+            </svg>
+          </div>
           <div>
             <h1>设计任务实时看板</h1>
             <p id="liveClock">加载中</p>
@@ -45,9 +59,10 @@
       <section class="summary-strip" aria-label="看板概览">
         <div class="period-controls">
           <div class="month-control">
-          <button class="icon-button subtle" id="prevMonth" aria-label="上一周期" title="上一周期">‹</button>
-          <div id="monthLabel" class="month-label">2026年05月</div>
-          <button class="icon-button subtle" id="nextMonth" aria-label="下一周期" title="下一周期">›</button>
+            <button class="icon-button subtle" id="prevMonth" aria-label="上一周期" title="上一周期">‹</button>
+            <div id="monthLabel" class="month-label">2026年05月</div>
+            <button class="icon-button subtle" id="nextMonth" aria-label="下一周期" title="下一周期">›</button>
+            <button class="ghost-button today-button" id="todayButton" type="button">今天</button>
           </div>
           <div class="view-switch" aria-label="看板视图">
             <button class="view-button is-active" id="weekView" type="button">周</button>
@@ -187,6 +202,6 @@
     </div>
 
     <script src="./supabase-config.js"></script>
-    <script src="./app.js?v=20260616-layout-login"></script>
+    <script src="./app.js?v=20260617-flat-logo"></script>
   </body>
 </html>

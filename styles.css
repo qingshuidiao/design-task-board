@@ -21,6 +21,10 @@
   --done-fg: #0a9968;
   --leave-bg: #e4e8ef;
   --leave-fg: #5f6878;
+  --holiday-bg: #fff0ed;
+  --holiday-fg: #c2412d;
+  --workday-bg: #eef8f1;
+  --workday-fg: #247047;
 }
 
 * {
@@ -102,11 +106,26 @@ button {
   place-items: center;
   width: 42px;
   height: 42px;
-  border-radius: 12px;
-  background: var(--primary);
+  border-radius: 13px;
+  background: #4d74ff;
   color: #fff;
-  font-weight: 800;
-  letter-spacing: 0;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 8px 18px rgba(49, 91, 231, 0.18);
+}
+
+.mark-icon {
+  width: 30px;
+  height: 30px;
+  overflow: visible;
+}
+
+.mark-tile {
+  fill: rgba(255, 255, 255, 0.92);
+}
+
+.mark-focus {
+  fill: #f8d48a;
 }
 
 h1,
@@ -136,6 +155,18 @@ h1 {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.today-button {
+  height: 38px;
+  font-weight: 800;
+}
+
+.today-button:disabled {
+  background: #f8faff;
+  color: #9aa4b2;
+  box-shadow: none;
+  transform: none;
 }
 
 .editor-auth {
@@ -244,6 +275,10 @@ body.is-auth-locked .access-gate {
 }
 
 .period-controls {
+  flex-wrap: wrap;
+}
+
+.month-control {
   flex-wrap: wrap;
 }
 
@@ -488,6 +523,18 @@ textarea:focus {
   background: linear-gradient(180deg, rgba(77, 116, 255, 0.12), rgba(77, 116, 255, 0.02));
 }
 
+.day-head.is-holiday {
+  background: linear-gradient(180deg, rgba(255, 112, 88, 0.14), rgba(255, 240, 237, 0.58));
+}
+
+.day-head.is-workday {
+  background: linear-gradient(180deg, rgba(60, 169, 96, 0.12), rgba(238, 248, 241, 0.58));
+}
+
+.weekday-block {
+  min-width: 0;
+}
+
 .weekday {
   display: flex;
   align-items: baseline;
@@ -499,6 +546,47 @@ textarea:focus {
 .weekday b {
   font-size: 16px;
   color: var(--muted);
+}
+
+.day-note {
+  margin-top: 5px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.day-meta {
+  display: grid;
+  flex: 0 0 auto;
+  justify-items: end;
+  gap: 6px;
+}
+
+.day-badge,
+.month-day-label {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 22px;
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.day-badge.is-holiday,
+.month-day-label.is-holiday {
+  background: var(--holiday-bg);
+  color: var(--holiday-fg);
+}
+
+.day-badge.is-workday,
+.month-day-label.is-workday {
+  background: var(--workday-bg);
+  color: var(--workday-fg);
 }
 
 .day-count {
@@ -557,6 +645,14 @@ textarea:focus {
   background: #fbfcff;
 }
 
+.grid-cell.is-holiday-cell {
+  background: rgba(255, 240, 237, 0.58);
+}
+
+.grid-cell.is-workday-cell {
+  background: rgba(238, 248, 241, 0.62);
+}
+
 .grid-cell.is-hovered {
   background: rgba(77, 116, 255, 0.08);
 }
@@ -570,7 +666,7 @@ textarea:focus {
 
 .month-grid {
   grid-template-rows: none;
-  grid-auto-rows: minmax(132px, auto);
+  grid-auto-rows: minmax(var(--month-row-height, 156px), auto);
   padding: 0;
 }
 
@@ -728,6 +824,8 @@ body.is-read-only .resize-handle {
 }
 
 .month-cell {
+  position: relative;
+  z-index: 1;
   min-height: 132px;
   padding: 10px;
   border-right: 1px solid var(--line);
@@ -748,12 +846,27 @@ body.is-read-only .resize-handle {
   background: linear-gradient(180deg, rgba(77, 116, 255, 0.1), rgba(255, 255, 255, 0));
 }
 
+.month-cell.is-holiday {
+  background: linear-gradient(180deg, rgba(255, 112, 88, 0.11), rgba(255, 255, 255, 0) 72px);
+}
+
+.month-cell.is-workday {
+  background: linear-gradient(180deg, rgba(60, 169, 96, 0.1), rgba(255, 255, 255, 0) 72px);
+}
+
 .month-date {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 8px;
+}
+
+.month-day-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .month-date strong {
@@ -766,17 +879,31 @@ body.is-read-only .resize-handle {
   font-weight: 800;
 }
 
-.month-tasks {
-  display: grid;
-  gap: 6px;
+.month-day-label {
+  height: 20px;
+  min-width: 24px;
+  padding: 0 7px;
+  font-size: 11px;
+}
+
+.month-holiday {
+  margin: -2px 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .month-task {
+  position: relative;
+  z-index: 3;
   display: flex;
   align-items: center;
   min-width: 0;
   gap: 7px;
-  min-height: 34px;
+  height: 28px;
+  min-height: 28px;
+  align-self: start;
+  margin: var(--month-stack-offset, 52px) 6px 0;
   border: 1px solid rgba(255, 255, 255, 0.66);
   border-radius: 7px;
   padding: 0 8px;
@@ -784,6 +911,17 @@ body.is-read-only .resize-handle {
   color: var(--task-fg);
   box-shadow: 0 5px 12px rgba(54, 74, 118, 0.08);
   text-align: left;
+  overflow: hidden;
+}
+
+.month-task.is-segment-continued {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.month-task.is-segment-continues {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 .month-task span {
@@ -801,14 +939,12 @@ body.is-read-only .resize-handle {
 
 .month-task b {
   min-width: 0;
-  display: -webkit-box;
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  white-space: normal;
+  white-space: nowrap;
   font-size: 12px;
-  line-height: 1.15;
+  line-height: 1.1;
 }
 
 .month-task.is-done {

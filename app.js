@@ -4,6 +4,16 @@ const minLaneCount = 7;
 const maxLaneCount = 99;
 const SUPABASE_CLIENT_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 const supabaseConfig = window.BOARD_SUPABASE_CONFIG || {};
+const brandMarkHtml = `
+  <div class="mark" aria-hidden="true">
+    <svg class="mark-icon" viewBox="0 0 48 48" focusable="false">
+      <rect class="mark-tile" x="12" y="12" width="10" height="10" rx="3" />
+      <rect class="mark-tile" x="26" y="12" width="10" height="10" rx="3" />
+      <rect class="mark-tile" x="12" y="26" width="10" height="10" rx="3" />
+      <rect class="mark-focus" x="26" y="26" width="10" height="10" rx="3" />
+    </svg>
+  </div>
+`;
 
 const owners = [
   { id: "di", name: "迪", tone: "blue" },
@@ -16,6 +26,27 @@ const statusText = {
   done: "已完成",
   leave: "请假",
 };
+
+const nationalHolidayRanges = [
+  { name: "元旦", start: "2026-01-01", end: "2026-01-03" },
+  { name: "春节", start: "2026-02-15", end: "2026-02-23" },
+  { name: "清明节", start: "2026-04-04", end: "2026-04-06" },
+  { name: "劳动节", start: "2026-05-01", end: "2026-05-05" },
+  { name: "端午节", start: "2026-06-19", end: "2026-06-21" },
+  { name: "中秋节", start: "2026-09-25", end: "2026-09-27" },
+  { name: "国庆节", start: "2026-10-01", end: "2026-10-07" },
+];
+
+const specialWorkdays = [
+  { name: "调休补班", date: "2026-01-04" },
+  { name: "调休补班", date: "2026-02-14" },
+  { name: "调休补班", date: "2026-02-28" },
+  { name: "调休补班", date: "2026-05-09" },
+  { name: "调休补班", date: "2026-09-20" },
+  { name: "调休补班", date: "2026-10-10" },
+];
+
+const nationalDaySchedule = createNationalDaySchedule(nationalHolidayRanges, specialWorkdays);
 
 let state = {
   weekStart: startOfWeek(new Date()),
@@ -52,6 +83,7 @@ const els = {
   liveClock: document.querySelector("#liveClock"),
   prevMonth: document.querySelector("#prevMonth"),
   nextMonth: document.querySelector("#nextMonth"),
+  todayButton: document.querySelector("#todayButton"),
   monthLabel: document.querySelector("#monthLabel"),
   weekView: document.querySelector("#weekView"),
   monthView: document.querySelector("#monthView"),
@@ -148,7 +180,7 @@ function ensureAccessGate() {
   gate.setAttribute("aria-label", "访问验证");
   gate.innerHTML = `
     <form class="access-card" id="accessForm">
-      <div class="mark">D</div>
+      ${brandMarkHtml}
       <h2>设计任务实时看板</h2>
       <p id="accessHint">请输入成员邮箱，登录后查看看板</p>
       <label class="field">
@@ -214,6 +246,7 @@ function applyEditMode() {
 function bindEvents() {
   els.prevMonth.addEventListener("click", () => navigatePeriod(-1));
   els.nextMonth.addEventListener("click", () => navigatePeriod(1));
+  els.todayButton?.addEventListener("click", goToToday);
   els.weekView.addEventListener("click", () => setViewMode("week"));
   els.monthView.addEventListener("click", () => setViewMode("month"));
 
@@ -626,6 +659,7 @@ function render() {
   els.monthLabel.textContent = formatPeriodLabel(period);
   els.weekView.classList.toggle("is-active", state.viewMode === "week");
   els.monthView.classList.toggle("is-active", state.viewMode === "month");
+  if (els.todayButton) els.todayButton.disabled = isCurrentPeriod(period);
   els.boardBody.classList.toggle("is-month-view", state.viewMode === "month");
 
   if (state.viewMode === "week") {
@@ -654,11 +688,23 @@ function renderWeekHeader(weekDays) {
   els.boardHeader.innerHTML = weekDays
     .map((date) => {
       const iso = toISODate(date);
+      const schedule = getNationalDaySchedule(iso);
       const dayTasks = visibleTasks.filter((task) => dateInRange(iso, task.start, task.end));
+      const classes = [
+        "day-head",
+        iso === today ? "is-today" : "",
+        schedule ? `is-${schedule.type}` : "",
+      ].filter(Boolean).join(" ");
       return `
-        <div class="day-head ${iso === today ? "is-today" : ""}">
-          <div class="weekday"><span>${weekdayText(date)}</span><b>${formatShortDate(date)}</b></div>
-          <span class="day-count">${dayTasks.length} 项</span>
+        <div class="${classes}" title="${escapeHtml(getScheduleTitle(schedule))}">
+          <div class="weekday-block">
+            <div class="weekday"><span>${weekdayText(date)}</span><b>${formatShortDate(date)}</b></div>
+            ${schedule ? `<div class="day-note">${escapeHtml(schedule.name)}</div>` : ""}
+          </div>
+          <div class="day-meta">
+            ${schedule ? `<span class="day-badge is-${schedule.type}">${scheduleLabel(schedule)}</span>` : ""}
+            <span class="day-count">${dayTasks.length} 项</span>
+          </div>
         </div>
       `;
     })
@@ -671,8 +717,14 @@ function renderWeekGrid(weekDays, laneTotal = minLaneCount) {
   const cells = [];
   for (let lane = 1; lane <= laneTotal; lane += 1) {
     for (let day = 0; day < 7; day += 1) {
+      const schedule = getNationalDaySchedule(weekDates[day]);
+      const classes = [
+        "grid-cell",
+        weekDates[day] === today ? "is-today-cell" : "",
+        schedule ? `is-${schedule.type}-cell` : "",
+      ].filter(Boolean).join(" ");
       cells.push(
-        `<div class="grid-cell ${weekDates[day] === today ? "is-today-cell" : ""}" data-day="${day}" data-lane="${lane}"></div>`,
+        `<div class="${classes}" data-day="${day}" data-lane="${lane}"></div>`,
       );
     }
   }
@@ -771,32 +823,48 @@ function renderMonthCells(period) {
   const today = toISODate(new Date());
   const activeMonth = state.weekStart.getMonth();
   const visibleTasks = getVisibleTasks(period);
+  const layout = buildMonthLayout(period, visibleTasks);
+  els.taskGrid.style.setProperty("--month-row-height", `${88 + layout.rowCount * 34}px`);
 
-  els.taskGrid.innerHTML = period.days
-    .map((date) => {
+  const cells = period.days
+    .map((date, index) => {
       const iso = toISODate(date);
+      const schedule = getNationalDaySchedule(iso);
       const dayTasks = visibleTasks
         .filter((task) => dateInRange(iso, task.start, task.end))
         .sort((a, b) => a.lane - b.lane || a.start.localeCompare(b.start) || a.title.localeCompare(b.title));
-      const taskMarkup = dayTasks
-        .map((task) => renderMonthTask(task))
-        .join("");
+      const classes = [
+        "month-cell",
+        date.getMonth() !== activeMonth ? "is-outside-month" : "",
+        iso === today ? "is-today" : "",
+        schedule ? `is-${schedule.type}` : "",
+      ].filter(Boolean).join(" ");
+      const gridColumn = (index % 7) + 1;
+      const gridRow = Math.floor(index / 7) + 1;
 
       return `
         <section
-          class="month-cell ${date.getMonth() !== activeMonth ? "is-outside-month" : ""} ${iso === today ? "is-today" : ""}"
+          class="${classes}"
           data-date="${iso}"
           data-lane="1"
+          style="grid-column: ${gridColumn}; grid-row: ${gridRow};"
+          title="${escapeHtml(getScheduleTitle(schedule))}"
         >
           <div class="month-date">
-            <strong>${date.getDate()}</strong>
+            <div class="month-day-title">
+              <strong>${date.getDate()}</strong>
+              ${schedule ? `<span class="month-day-label is-${schedule.type}">${scheduleLabel(schedule)}</span>` : ""}
+            </div>
             <span>${dayTasks.length ? `${dayTasks.length} 项` : ""}</span>
           </div>
-          <div class="month-tasks">${taskMarkup}</div>
+          ${schedule ? `<div class="month-holiday">${escapeHtml(schedule.name)}</div>` : ""}
         </section>
       `;
     })
     .join("");
+  const taskBars = layout.segments.map((segment) => renderMonthTask(segment)).join("");
+
+  els.taskGrid.innerHTML = `${cells}${taskBars}`;
 
   els.taskGrid.querySelectorAll(".month-task").forEach((task) => {
     task.addEventListener("click", (event) => {
@@ -809,8 +877,21 @@ function renderMonthCells(period) {
 function renderMonthTask(task) {
   const owner = getOwner(task.owner);
   const tone = owner.tone;
+  const classes = [
+    "month-task",
+    `tone-${tone}`,
+    `is-${task.status}`,
+    task.isStart ? "is-segment-start" : "is-segment-continued",
+    task.isEnd ? "is-segment-end" : "is-segment-continues",
+  ].filter(Boolean).join(" ");
   return `
-    <button class="month-task tone-${tone} is-${task.status}" data-id="${task.id}" type="button" title="${escapeHtml(task.title)}">
+    <button
+      class="${classes}"
+      data-id="${task.id}"
+      type="button"
+      style="grid-column: ${task.startColumn} / span ${task.span}; grid-row: ${task.weekRow}; --month-stack-offset: ${52 + task.stack * 34}px;"
+      title="${escapeHtml(`${task.title} · ${formatRange(task.start, task.end)}`)}"
+    >
       <span>${owner.name}</span>
       <b>${escapeHtml(task.title)}</b>
     </button>
@@ -820,16 +901,20 @@ function renderMonthTask(task) {
 function renderMetrics(period) {
   const visibleTasks = getVisibleTasks(period);
   const today = toISODate(new Date());
+  const schedule = getNationalDaySchedule(today);
+  const nextHoliday = schedule?.type === "holiday" ? schedule : getNextHoliday(today);
   const open = visibleTasks.filter((task) => task.status === "open").length;
   const todayTasks = visibleTasks.filter((task) => dateInRange(today, task.start, task.end)).length;
   const done = visibleTasks.filter((task) => task.status === "done").length;
   const leave = visibleTasks.filter((task) => task.status === "leave").length;
   const periodLabel = state.viewMode === "week" ? "本周任务" : "本月任务";
+  const holidayReminder = getHolidayReminder(schedule, nextHoliday);
 
   els.metrics.innerHTML = [
     metric(periodLabel, visibleTasks.length),
     metric("未完成", open),
     metric("今日覆盖", todayTasks),
+    metric("假期提醒", holidayReminder),
     metric("已完成", done),
     metric("请假", leave),
   ].join("");
@@ -878,6 +963,62 @@ function buildWeekLayout(tasks) {
     lanesByTaskId,
     laneCount: clamp(Math.max(highestLayoutLane, highestSavedLane), minLaneCount, maxLaneCount),
   };
+}
+
+function buildMonthLayout(period, tasks) {
+  const weekRows = Math.ceil(period.days.length / 7);
+  const stacksByWeek = Array.from({ length: weekRows }, () => []);
+  const segments = [];
+  const gridStart = period.days[0];
+  const gridEnd = period.days[period.days.length - 1];
+
+  tasks.forEach((task) => {
+    const taskStart = parseISODate(task.start);
+    const taskEnd = parseISODate(task.end);
+
+    for (let weekIndex = 0; weekIndex < weekRows; weekIndex += 1) {
+      const weekStart = addDays(gridStart, weekIndex * 7);
+      const weekEnd = addDays(weekStart, 6);
+      const segmentStart = maxDate(taskStart, weekStart);
+      const segmentEnd = minDate(taskEnd, weekEnd);
+      if (segmentStart > segmentEnd) continue;
+
+      const startOffset = differenceInDays(weekStart, segmentStart);
+      const endOffset = differenceInDays(weekStart, segmentEnd);
+      const stack = findOpenMonthStack(stacksByWeek[weekIndex], startOffset, endOffset);
+      stacksByWeek[weekIndex].push({ startOffset, endOffset, stack });
+      segments.push({
+        ...task,
+        weekRow: weekIndex + 1,
+        startColumn: startOffset + 1,
+        span: endOffset - startOffset + 1,
+        stack,
+        isStart: toISODate(segmentStart) === task.start,
+        isEnd: toISODate(segmentEnd) === task.end,
+      });
+    }
+  });
+
+  const maxStack = stacksByWeek.reduce((max, week) => {
+    const weekMax = week.reduce((stackMax, item) => Math.max(stackMax, item.stack), -1);
+    return Math.max(max, weekMax);
+  }, -1);
+
+  return {
+    segments,
+    rowCount: Math.max(maxStack + 1, 2),
+  };
+}
+
+function findOpenMonthStack(segments, startOffset, endOffset) {
+  for (let stack = 0; stack < maxLaneCount; stack += 1) {
+    const occupied = segments.some((segment) => {
+      if (segment.stack !== stack) return false;
+      return startOffset <= segment.endOffset && endOffset >= segment.startOffset;
+    });
+    if (!occupied) return stack;
+  }
+  return maxLaneCount - 1;
 }
 
 function findOpenLane(start, end, preferredLane = 1, excludeId = null, tasks = state.tasks) {
@@ -1225,6 +1366,19 @@ function navigatePeriod(direction) {
   setPeriod(nextDate);
 }
 
+function isCurrentPeriod(period) {
+  const today = new Date();
+  if (state.viewMode === "week") {
+    return dateInRange(toISODate(today), toISODate(period.start), toISODate(period.end));
+  }
+  return state.weekStart.getFullYear() === today.getFullYear() && state.weekStart.getMonth() === today.getMonth();
+}
+
+function goToToday() {
+  setPeriod(new Date());
+  showToast("已回到今天");
+}
+
 function setPeriod(date) {
   state.weekStart = state.viewMode === "week" ? startOfWeek(date) : new Date(date.getFullYear(), date.getMonth(), 1);
   render();
@@ -1317,7 +1471,9 @@ function clearCellHighlight() {
 
 function updateClock() {
   const now = new Date();
-  els.liveClock.textContent = `${formatFullDate(now)} · ${now.toLocaleTimeString("zh-CN", {
+  const schedule = getNationalDaySchedule(toISODate(now));
+  const scheduleText = schedule ? ` · ${schedule.name}${schedule.type === "holiday" ? "休假" : "补班"}` : "";
+  els.liveClock.textContent = `${formatFullDate(now)}${scheduleText} · ${now.toLocaleTimeString("zh-CN", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -1334,6 +1490,61 @@ function showToast(message) {
 
 function getOwner(id) {
   return owners.find((owner) => owner.id === id) || owners[0];
+}
+
+function createNationalDaySchedule(holidayRanges, workdays) {
+  const schedule = {};
+
+  holidayRanges.forEach((holiday) => {
+    let date = parseISODate(holiday.start);
+    const end = parseISODate(holiday.end);
+    while (date <= end) {
+      schedule[toISODate(date)] = {
+        type: "holiday",
+        name: holiday.name,
+      };
+      date = addDays(date, 1);
+    }
+  });
+
+  workdays.forEach((workday) => {
+    schedule[workday.date] = {
+      type: "workday",
+      name: workday.name,
+    };
+  });
+
+  return schedule;
+}
+
+function getNationalDaySchedule(dateOrIso) {
+  const iso = typeof dateOrIso === "string" ? dateOrIso : toISODate(dateOrIso);
+  const schedule = nationalDaySchedule[iso];
+  return schedule ? { ...schedule, iso } : null;
+}
+
+function scheduleLabel(schedule) {
+  if (!schedule) return "";
+  return schedule.type === "holiday" ? "休" : "班";
+}
+
+function getScheduleTitle(schedule) {
+  if (!schedule) return "";
+  return schedule.type === "holiday" ? `${schedule.name} · 休假` : `${schedule.name} · 周末上班`;
+}
+
+function getNextHoliday(todayIso) {
+  const nextIso = Object.keys(nationalDaySchedule)
+    .filter((iso) => iso >= todayIso && nationalDaySchedule[iso].type === "holiday")
+    .sort()[0];
+  return nextIso ? { ...nationalDaySchedule[nextIso], iso: nextIso } : null;
+}
+
+function getHolidayReminder(todaySchedule, nextHoliday) {
+  if (todaySchedule?.type === "holiday") return `${todaySchedule.name}休`;
+  if (todaySchedule?.type === "workday") return "今日补班";
+  if (nextHoliday) return `${formatShortISODate(nextHoliday.iso)} ${nextHoliday.name}`;
+  return "暂无";
 }
 
 function createId() {
@@ -1401,6 +1612,10 @@ function weekdayText(date) {
 
 function formatShortDate(date) {
   return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+function formatShortISODate(iso) {
+  return iso.slice(5).replace("-", "/");
 }
 
 function formatMonth(date) {
