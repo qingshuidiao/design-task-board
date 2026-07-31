@@ -203,9 +203,9 @@ on conflict (id) do nothing;
 
 -- To schedule a member's access cutoff, run this separately in Supabase SQL
 -- Editor. Keep real member emails out of the repository. The example below
--- stops access at 23:30 China Standard Time on July 31, 2026:
+-- stops access at 10:15 China Standard Time on July 31, 2026:
 -- update public.design_board_members
--- set access_expires_at = '2026-07-31 23:30:00+08'
+-- set access_expires_at = '2026-07-31 10:15:00+08'
 -- where email = 'member@example.com';
 
 create or replace function public.set_design_tasks_updated_at()
