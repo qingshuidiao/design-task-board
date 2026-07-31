@@ -70,6 +70,7 @@ let boardStarted = false;
 let accessRole = "guest";
 let editorEmail = "";
 let authListener = null;
+let accessExpiryTimer = null;
 
 const channel = createBroadcastChannel();
 
@@ -390,6 +391,7 @@ async function updateEditorSession(session) {
   if (els.accessEmail && email) els.accessEmail.value = email;
 
   if (!email) {
+    clearAccessExpiryTimer();
     accessRole = "guest";
     state.tasks = [];
     lockBoard("请输入成员邮箱，登录后查看看板");
@@ -408,7 +410,13 @@ async function updateEditorSession(session) {
     return;
   }
 
+  if (!member.is_active) {
+    await expireMemberSession();
+    return;
+  }
+
   accessRole = member.role === "editor" ? "editor" : "viewer";
+  scheduleAccessExpiry(member);
   unlockBoard();
   if (els.accessLogout) els.accessLogout.hidden = true;
   if (els.accessError) els.accessError.textContent = "";
@@ -423,16 +431,83 @@ async function getBoardMember(email) {
   if (!remoteClient || !email) return false;
 
   const { data, error } = await remoteClient
-    .from("design_board_members")
-    .select("email, role")
-    .eq("email", email)
+    .rpc("get_design_board_access")
     .maybeSingle();
 
   if (error) {
     console.error(error);
     return false;
   }
-  return data || false;
+  if (!data) return false;
+  return {
+    email,
+    role: data.member_role,
+    access_expires_at: data.access_expires_at,
+    is_active: data.is_active,
+    server_now: data.server_now,
+  };
+}
+
+function clearAccessExpiryTimer() {
+  if (accessExpiryTimer) {
+    window.clearTimeout(accessExpiryTimer);
+    accessExpiryTimer = null;
+  }
+}
+
+function scheduleAccessExpiry(member) {
+  clearAccessExpiryTimer();
+  if (!member?.access_expires_at) return;
+
+  const expiresAt = Date.parse(member.access_expires_at);
+  const serverNow = Date.parse(member.server_now);
+  if (!Number.isFinite(expiresAt) || !Number.isFinite(serverNow)) return;
+
+  const remaining = expiresAt - serverNow;
+  if (remaining <= 0) {
+    expireMemberSession().catch(console.error);
+    return;
+  }
+
+  const maxTimerDelay = 2_147_000_000;
+  accessExpiryTimer = window.setTimeout(() => {
+    if (remaining > maxTimerDelay) {
+      getBoardMember(editorEmail)
+        .then((latestMember) => {
+          if (!latestMember || !latestMember.is_active) {
+            return expireMemberSession();
+          }
+          scheduleAccessExpiry(latestMember);
+        })
+        .catch(console.error);
+      return;
+    }
+    expireMemberSession().catch(console.error);
+  }, Math.min(remaining, maxTimerDelay));
+}
+
+async function expireMemberSession() {
+  clearAccessExpiryTimer();
+  accessRole = "guest";
+  state.tasks = [];
+  closeDrawer();
+  hideContextMenu();
+  applyEditMode();
+
+  const message = "登录失败，请联系管理员";
+  lockBoard(message);
+  if (els.accessError) els.accessError.textContent = message;
+  if (els.accessLogout) els.accessLogout.hidden = false;
+
+  if (remoteClient) {
+    const { error } = await remoteClient.auth.signOut({ scope: "global" });
+    if (error) console.error(error);
+  }
+
+  editorEmail = "";
+  lockBoard(message);
+  if (els.accessError) els.accessError.textContent = message;
+  showToast("登录失败");
 }
 
 function openEditorGate() {
@@ -525,6 +600,7 @@ function getLoginErrorMessage(error) {
 
 async function signOutEditor() {
   if (!remoteClient) return;
+  clearAccessExpiryTimer();
   const { error } = await remoteClient.auth.signOut();
   if (error) {
     console.error(error);

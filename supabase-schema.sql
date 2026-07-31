@@ -30,8 +30,12 @@ create table if not exists public.design_board_members (
   email text primary key check (email = lower(email)),
   display_name text not null default '',
   role text not null default 'viewer',
+  access_expires_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+alter table public.design_board_members
+add column if not exists access_expires_at timestamptz;
 
 create table if not exists public.design_board_keepalive (
   id text primary key default 'keepalive' check (id = 'keepalive'),
@@ -65,6 +69,30 @@ grant select on public.design_board_editors to authenticated;
 grant select on public.design_board_members to authenticated;
 grant select on public.design_board_keepalive to anon, authenticated;
 
+create or replace function public.get_design_board_access()
+returns table (
+  member_role text,
+  access_expires_at timestamptz,
+  is_active boolean,
+  server_now timestamptz
+)
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select
+    member.role,
+    member.access_expires_at,
+    member.access_expires_at is null or statement_timestamp() < member.access_expires_at,
+    statement_timestamp()
+  from public.design_board_members as member
+  where member.email = lower(auth.jwt() ->> 'email');
+$$;
+
+revoke all on function public.get_design_board_access() from public, anon;
+grant execute on function public.get_design_board_access() to authenticated;
+
 drop policy if exists "Allow public task reads" on public.design_tasks;
 drop policy if exists "Allow member task reads" on public.design_tasks;
 create policy "Allow member task reads"
@@ -76,6 +104,7 @@ using (
     select 1
     from public.design_board_members member
     where member.email = lower(auth.jwt() ->> 'email')
+      and (member.access_expires_at is null or now() < member.access_expires_at)
   )
 );
 
@@ -91,6 +120,7 @@ with check (
     from public.design_board_members member
     where member.email = lower(auth.jwt() ->> 'email')
       and member.role = 'editor'
+      and (member.access_expires_at is null or now() < member.access_expires_at)
   )
 );
 
@@ -106,6 +136,7 @@ using (
     from public.design_board_members member
     where member.email = lower(auth.jwt() ->> 'email')
       and member.role = 'editor'
+      and (member.access_expires_at is null or now() < member.access_expires_at)
   )
 )
 with check (
@@ -114,6 +145,7 @@ with check (
     from public.design_board_members member
     where member.email = lower(auth.jwt() ->> 'email')
       and member.role = 'editor'
+      and (member.access_expires_at is null or now() < member.access_expires_at)
   )
 );
 
@@ -129,6 +161,7 @@ using (
     from public.design_board_members member
     where member.email = lower(auth.jwt() ->> 'email')
       and member.role = 'editor'
+      and (member.access_expires_at is null or now() < member.access_expires_at)
   )
 );
 
@@ -167,6 +200,13 @@ on conflict (id) do nothing;
 -- on conflict (email) do update
 -- set display_name = excluded.display_name,
 --     role = excluded.role;
+
+-- To schedule a member's access cutoff, run this separately in Supabase SQL
+-- Editor. Keep real member emails out of the repository. The example below
+-- stops access at 23:30 China Standard Time on July 31, 2026:
+-- update public.design_board_members
+-- set access_expires_at = '2026-07-31 23:30:00+08'
+-- where email = 'member@example.com';
 
 create or replace function public.set_design_tasks_updated_at()
 returns trigger
